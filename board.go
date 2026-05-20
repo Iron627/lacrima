@@ -35,7 +35,7 @@ const (
 	BlackKing   = -6
 )
 
-var knightOffsets = [8]int{
+var KnightOffsets = [8]int{
 	-33, -31, -18, -14,
 	14, 18, 31, 33,
 }
