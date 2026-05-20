@@ -117,3 +117,62 @@ func pawn(pos *Position, from int) []Move {
 
 	return moves
 }
+func king(pos *Position, from int) []Move {
+	var moves []Move
+	piece := pos.Board[from]
+	if PieceType(piece) != 6 {
+		return moves
+	}
+	for _, dir := range []int{N, S, E, W, NE, SE, NW, SW} {
+		to := from + dir
+		if IsOffBoard(to) {
+			continue
+		}
+		target := pos.Board[to]
+		if target == Empty || !SameColor(piece, target) {
+			moves = append(moves, Move{From: from, To: to})
+		}
+	}
+	if piece > 0 {
+		if pos.CastlingRights&WhiteKingside != 0 &&
+			pos.Board[5] == Empty && pos.Board[6] == Empty {
+			moves = append(moves, Move{From: from, To: 6, isCastling: true})
+		}
+		if pos.CastlingRights&WhiteQueenside != 0 &&
+			pos.Board[1] == Empty && pos.Board[2] == Empty && pos.Board[3] == Empty {
+			moves = append(moves, Move{From: from, To: 2, isCastling: true})
+		}
+	} else {
+		if pos.CastlingRights&BlackKingside != 0 &&
+			pos.Board[117] == Empty && pos.Board[118] == Empty {
+			moves = append(moves, Move{From: from, To: 118, isCastling: true})
+		}
+		if pos.CastlingRights&BlackQueenside != 0 &&
+			pos.Board[113] == Empty && pos.Board[114] == Empty && pos.Board[115] == Empty {
+			moves = append(moves, Move{From: from, To: 114, isCastling: true})
+		}
+	}
+	return moves
+}
+func GeneratePseudoLegalMoves(pos *Position) []Move {
+	var moves []Move
+
+	for i, piece := range pos.Board {
+		if piece == Empty || (piece > 0) != (pos.SideToMove > 0) {
+			continue
+		}
+
+		switch PieceType(piece) {
+		case 1:
+			moves = append(moves, pawn(pos, i)...)
+		case 2:
+			moves = append(moves, knight(pos, i)...)
+		case 3, 4, 5:
+			moves = append(moves, slide(pos, i)...)
+		case 6:
+			moves = append(moves, king(pos, i)...)
+		}
+	}
+
+	return moves
+}

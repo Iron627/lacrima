@@ -20,6 +20,12 @@ type Position struct {
 }
 
 const (
+	WhiteKingside  uint8 = 1 << 0 // 0001
+	WhiteQueenside uint8 = 1 << 1 // 0010
+	BlackKingside  uint8 = 1 << 2 // 0100
+	BlackQueenside uint8 = 1 << 3 // 1000
+)
+const (
 	Empty       = 0
 	WhitePawn   = 1
 	WhiteKnight = 2
