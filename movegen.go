@@ -62,17 +62,17 @@ func pawn(pos *Position, from int) []Move {
 	}
 
 	if piece > 0 {
-		dir = N
+		dir = S
 		startRank = 1
 	} else {
-		dir = S
+		dir = N
 		startRank = 6
 	}
 
 	to := from + dir
 
 	if !IsOffBoard(to) && pos.Board[to] == Empty {
-		if (to>>4 == 0 && piece > 0) || (to>>4 == 7 && piece < 0) {
+		if (to>>4 == 7 && piece > 0) || (to>>4 == 0 && piece < 0) {
 			for promo := int8(2); promo <= 5; promo++ {
 				moves = append(moves, Move{From: from, To: to, Promotion: promo})
 			}
@@ -96,7 +96,7 @@ func pawn(pos *Position, from int) []Move {
 
 		target := pos.Board[captureTo]
 		if target != Empty && !SameColor(piece, target) {
-			if (captureTo>>4 == 0 && piece > 0) || (captureTo>>4 == 7 && piece < 0) {
+			if (captureTo>>4 == 7 && piece > 0) || (captureTo>>4 == 0 && piece < 0) {
 				for promo := int8(2); promo <= 5; promo++ {
 					moves = append(moves, Move{From: from, To: captureTo, Promotion: promo})
 				}
@@ -109,7 +109,9 @@ func pawn(pos *Position, from int) []Move {
 	if pos.EnPassantSquare != -1 {
 		for _, sideDir := range []int{E, W} {
 			epTo := from + dir + sideDir
-			if epTo == int(pos.EnPassantSquare) {
+			capturedSquare := from + sideDir
+			if !IsOffBoard(epTo) && epTo == int(pos.EnPassantSquare) &&
+				pos.Board[capturedSquare] == -piece {
 				moves = append(moves, Move{From: from, To: epTo, isEnPassant: true})
 			}
 		}
@@ -134,21 +136,23 @@ func king(pos *Position, from int) []Move {
 		}
 	}
 	if piece > 0 {
-		if pos.CastlingRights&WhiteKingside != 0 &&
-			pos.Board[5] == Empty && pos.Board[6] == Empty {
+		if from == 4 && pos.CastlingRights&WhiteKingside != 0 &&
+			pos.Board[5] == Empty && pos.Board[6] == Empty && pos.Board[7] == WhiteRook {
 			moves = append(moves, Move{From: from, To: 6, isCastling: true})
 		}
-		if pos.CastlingRights&WhiteQueenside != 0 &&
-			pos.Board[1] == Empty && pos.Board[2] == Empty && pos.Board[3] == Empty {
+		if from == 4 && pos.CastlingRights&WhiteQueenside != 0 &&
+			pos.Board[1] == Empty && pos.Board[2] == Empty && pos.Board[3] == Empty &&
+			pos.Board[0] == WhiteRook {
 			moves = append(moves, Move{From: from, To: 2, isCastling: true})
 		}
 	} else {
-		if pos.CastlingRights&BlackKingside != 0 &&
-			pos.Board[117] == Empty && pos.Board[118] == Empty {
+		if from == 116 && pos.CastlingRights&BlackKingside != 0 &&
+			pos.Board[117] == Empty && pos.Board[118] == Empty && pos.Board[119] == BlackRook {
 			moves = append(moves, Move{From: from, To: 118, isCastling: true})
 		}
-		if pos.CastlingRights&BlackQueenside != 0 &&
-			pos.Board[113] == Empty && pos.Board[114] == Empty && pos.Board[115] == Empty {
+		if from == 116 && pos.CastlingRights&BlackQueenside != 0 &&
+			pos.Board[113] == Empty && pos.Board[114] == Empty && pos.Board[115] == Empty &&
+			pos.Board[112] == BlackRook {
 			moves = append(moves, Move{From: from, To: 114, isCastling: true})
 		}
 	}
@@ -158,7 +162,7 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 	var moves []Move
 
 	for i, piece := range pos.Board {
-		if piece == Empty || (piece > 0) != (pos.SideToMove > 0) {
+		if piece == Empty || (piece > 0) != (pos.SideToMove > 0 || IsOffBoard(i)) {
 			continue
 		}
 
