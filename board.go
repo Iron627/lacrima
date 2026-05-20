@@ -83,7 +83,7 @@ func FindKing(pos *Position, color int8) int {
 	}
 	return -1
 }
-func isSquareAttacked(pos *Position, square int, byColor int8) bool {
+func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 	if IsOffBoard(square) {
 		return false
 	}
@@ -161,7 +161,7 @@ func InCheck(pos *Position, color int8) bool {
 	if kingSquare == -1 {
 		return false
 	}
-	return isSquareAttacked(pos, kingSquare, -color)
+	return IsSquareAttacked(pos, kingSquare, -color)
 }
 
 func MakeMove(pos *Position, move Move) Undo {

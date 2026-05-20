@@ -180,3 +180,47 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 
 	return moves
 }
+
+func filterLegalMoves(pos *Position, moves []Move) []Move {
+	var legalMoves []Move
+
+	for _, move := range moves {
+		movingSide := pos.SideToMove
+
+		if move.isCastling {
+			var kingSquares []int
+
+			switch move.To {
+			case 6:
+				kingSquares = []int{4, 5, 6}
+			case 2:
+				kingSquares = []int{4, 3, 2}
+			case 118:
+				kingSquares = []int{116, 117, 118}
+			case 114:
+				kingSquares = []int{116, 115, 114}
+			}
+
+			illegalCastle := false
+			for _, sq := range kingSquares {
+				if IsSquareAttacked(pos, sq, -movingSide) {
+					illegalCastle = true
+					break
+				}
+			}
+			if illegalCastle {
+				continue
+			}
+		}
+
+		undo := MakeMove(pos, move)
+
+		if !InCheck(pos, movingSide) {
+			legalMoves = append(legalMoves, move)
+		}
+
+		UnmakeMove(pos, undo)
+	}
+
+	return legalMoves
+}
