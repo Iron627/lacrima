@@ -162,7 +162,7 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 	var moves []Move
 
 	for i, piece := range pos.Board {
-		if piece == Empty || (piece > 0) != (pos.SideToMove > 0 || IsOffBoard(i)) {
+		if IsOffBoard(i) || (piece == Empty || (piece > 0) != (pos.SideToMove > 0)) {
 			continue
 		}
 
