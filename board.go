@@ -18,6 +18,14 @@ type Position struct {
 	HalfmoveClock   int
 	FullmoveNumber  int
 }
+type Undo struct {
+	Move            Move
+	CapturedPiece   int8
+	CastlingRights  uint8
+	EnPassantSquare int8
+	HalfmoveClock   int
+	FullmoveNumber  int
+}
 
 const (
 	WhiteKingside  uint8 = 1 << 0 // 0001
@@ -66,6 +74,9 @@ func FindKing(pos *Position, color int8) int {
 		king = BlackKing
 	}
 	for i, piece := range pos.Board {
+		if IsOffBoard(i) {
+			continue
+		}
 		if int(piece) == king {
 			return i
 		}
@@ -151,6 +162,168 @@ func InCheck(pos *Position, color int8) bool {
 		return false
 	}
 	return isSquareAttacked(pos, kingSquare, -color)
+}
+
+func MakeMove(pos *Position, move Move) Undo {
+	piece := pos.Board[move.From]
+	capturedPiece := pos.Board[move.To]
+	if move.isEnPassant {
+		capturedSquare := move.To
+		if piece > 0 {
+			capturedSquare -= S
+		} else {
+			capturedSquare -= N
+		}
+		capturedPiece = pos.Board[capturedSquare]
+	}
+
+	undo := Undo{
+		Move:            move,
+		CapturedPiece:   capturedPiece,
+		CastlingRights:  pos.CastlingRights,
+		EnPassantSquare: pos.EnPassantSquare,
+		HalfmoveClock:   pos.HalfmoveClock,
+		FullmoveNumber:  pos.FullmoveNumber,
+	}
+
+	pos.Board[move.To] = piece
+	pos.Board[move.From] = Empty
+
+	if move.isDoublePawnPush {
+		if piece > 0 {
+			pos.EnPassantSquare = int8(move.From + S)
+		} else {
+			pos.EnPassantSquare = int8(move.From + N)
+		}
+	} else {
+		pos.EnPassantSquare = -1
+	}
+
+	if move.isEnPassant {
+		capturedSquare := move.To
+		if piece > 0 {
+			capturedSquare -= S
+		} else {
+			capturedSquare -= N
+		}
+		pos.Board[capturedSquare] = Empty
+	}
+
+	if move.Promotion != 0 {
+		if piece > 0 {
+			pos.Board[move.To] = move.Promotion
+		} else {
+			pos.Board[move.To] = -move.Promotion
+		}
+	}
+
+	if move.isCastling {
+		switch move.To {
+		case 6:
+			pos.Board[7], pos.Board[5] = Empty, WhiteRook
+		case 2:
+			pos.Board[0], pos.Board[3] = Empty, WhiteRook
+		case 118:
+			pos.Board[119], pos.Board[117] = Empty, BlackRook
+		case 114:
+			pos.Board[112], pos.Board[115] = Empty, BlackRook
+		}
+	}
+	switch piece {
+	case WhiteKing:
+		pos.CastlingRights &^= WhiteKingside | WhiteQueenside
+	case BlackKing:
+		pos.CastlingRights &^= BlackKingside | BlackQueenside
+	case WhiteRook:
+		switch move.From {
+		case 0:
+			pos.CastlingRights &^= WhiteQueenside
+		case 7:
+			pos.CastlingRights &^= WhiteKingside
+		}
+	case BlackRook:
+		switch move.From {
+		case 112:
+			pos.CastlingRights &^= BlackQueenside
+		case 119:
+			pos.CastlingRights &^= BlackKingside
+		}
+	}
+	switch undo.CapturedPiece {
+	case WhiteRook:
+		switch move.To {
+		case 0:
+			pos.CastlingRights &^= WhiteQueenside
+		case 7:
+			pos.CastlingRights &^= WhiteKingside
+		}
+	case BlackRook:
+		switch move.To {
+		case 112:
+			pos.CastlingRights &^= BlackQueenside
+		case 119:
+			pos.CastlingRights &^= BlackKingside
+		}
+	}
+	if undo.CapturedPiece != Empty {
+		pos.HalfmoveClock = 0
+	} else if piece == WhitePawn || piece == BlackPawn {
+		pos.HalfmoveClock = 0
+	} else {
+		pos.HalfmoveClock++
+	}
+
+	if pos.SideToMove < 0 {
+		pos.FullmoveNumber++
+	}
+
+	pos.SideToMove = -pos.SideToMove
+	return undo
+}
+func UnmakeMove(pos *Position, undo Undo) {
+	move := undo.Move
+
+	piece := pos.Board[move.To]
+	if move.Promotion != 0 {
+		if piece > 0 {
+			piece = WhitePawn
+		} else {
+			piece = BlackPawn
+		}
+	}
+	pos.Board[move.From] = piece
+	pos.Board[move.To] = undo.CapturedPiece
+	pos.EnPassantSquare = undo.EnPassantSquare
+	pos.CastlingRights = undo.CastlingRights
+	pos.HalfmoveClock = undo.HalfmoveClock
+	pos.FullmoveNumber = undo.FullmoveNumber
+
+	if move.isEnPassant {
+		pos.Board[move.To] = Empty
+
+		capturedSquare := move.To
+		if piece > 0 {
+			capturedSquare -= S
+		} else {
+			capturedSquare -= N
+		}
+
+		pos.Board[capturedSquare] = undo.CapturedPiece
+	}
+
+	if move.isCastling {
+		switch move.To {
+		case 6:
+			pos.Board[7], pos.Board[5] = WhiteRook, Empty
+		case 2:
+			pos.Board[0], pos.Board[3] = WhiteRook, Empty
+		case 118:
+			pos.Board[119], pos.Board[117] = BlackRook, Empty
+		case 114:
+			pos.Board[112], pos.Board[115] = BlackRook, Empty
+		}
+	}
+	pos.SideToMove = -pos.SideToMove
 }
 
 const (
