@@ -142,6 +142,7 @@ func parseGo(fields []string, stm int8) (int, int) {
 	var wtime, btime, winc, binc int
 	var moveTime int
 	infinite := false
+	hasExplicitDepth := false
 
 	for i := 1; i < len(fields); i++ {
 		switch fields[i] {
@@ -149,6 +150,7 @@ func parseGo(fields []string, stm int8) (int, int) {
 		case "depth":
 			if i+1 < len(fields) {
 				depth, _ = strconv.Atoi(fields[i+1])
+				hasExplicitDepth = true
 				i++
 			}
 
@@ -160,6 +162,9 @@ func parseGo(fields []string, stm int8) (int, int) {
 		case "movetime":
 			if i+1 < len(fields) {
 				moveTime, _ = strconv.Atoi(fields[i+1])
+				if !hasExplicitDepth {
+					depth = infiniteDepth
+				}
 				i++
 			}
 
@@ -199,6 +204,10 @@ func parseGo(fields []string, stm int8) (int, int) {
 		}
 
 		if timeLeft > 0 {
+			if !hasExplicitDepth {
+				depth = infiniteDepth
+			}
+
 			moveTime = timeLeft/30 + inc/2
 
 			if moveTime < 50 {
