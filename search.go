@@ -7,6 +7,8 @@ import (
 
 const mateScore = 100000
 const infoInterval = stdtime.Second
+const repetitionAvoidanceScore = -1
+const repetitionDrawScore = 0
 
 type SearchInfo struct {
 	Depth            int
@@ -30,9 +32,13 @@ func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64) (int, bool) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory) (int, bool) {
 	if searchStopped(ctx, deadline) {
 		return 0, false
+	}
+
+	if history != nil && history[positionKey(pos)] >= 3 {
+		return repetitionDrawScore, true
 	}
 
 	*nodes += 1
@@ -53,15 +59,24 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	for _, move := range moves {
 		undo := MakeMove(pos, move)
 
-		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes)
+		key, count := pushRepetition(history, pos)
+
+		var score int
+		var ok bool
+		if count >= 3 {
+			score = repetitionDrawScore
+			ok = true
+		} else {
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history)
+			score = -score
+		}
+		popRepetition(history, key)
 
 		UnmakeMove(pos, undo)
 
 		if !ok {
 			return 0, false
 		}
-
-		score = -score
 
 		if score >= beta {
 			return beta, true
@@ -80,10 +95,10 @@ func GetBestMove(pos *Position, depth int, time int) Move {
 }
 
 func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
-	return getBestMoveWithInfo(ctx, pos, depth, time, nil)
+	return getBestMoveWithInfo(ctx, pos, depth, time, nil, nil)
 }
 
-func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int, onInfo SearchInfoFunc) Move {
+func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc) Move {
 	colour := pos.SideToMove
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
@@ -121,15 +136,23 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 
 		undo := MakeMove(pos, move)
 
-		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes)
+		var score int
+		var ok bool
+		key, count := pushRepetition(history, pos)
+		if count >= 3 {
+			score = repetitionAvoidanceScore
+			ok = true
+		} else {
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history)
+			score = -score
+		}
+		popRepetition(history, key)
 
 		UnmakeMove(pos, undo)
 
 		if !ok {
 			break
 		}
-
-		score = -score
 
 		if score > bestScore {
 			bestScore = score

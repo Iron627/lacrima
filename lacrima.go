@@ -23,6 +23,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	scanner := bufio.NewScanner(input)
 
 	pos, _ := PositionFromFEN(startFEN)
+	history := RepetitionHistory{positionKey(&pos): 1}
 
 	var searchID atomic.Uint64
 	var searchCancel context.CancelFunc
@@ -66,6 +67,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 
 		case "ucinewgame":
 			pos, _ = PositionFromFEN(startFEN)
+			history = RepetitionHistory{positionKey(&pos): 1}
 
 		case "quit":
 			stopSearch(true)
@@ -75,9 +77,10 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			stopSearch(true)
 
 		case "position":
-			p, ok := parsePosition(fields)
+			p, h, ok := parsePositionWithHistory(fields)
 			if ok {
 				pos = p
+				history = h
 			}
 
 		case "go":
@@ -90,13 +93,14 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			searchDone = done
 
 			searchPos := pos
+			searchHistory := cloneRepetitionHistory(history)
 
 			depth, moveTime := parseGo(fields, searchPos.SideToMove)
 
 			go func() {
 				defer close(done)
 
-				best := getBestMoveWithInfo(ctx, &searchPos, depth, moveTime, func(info SearchInfo) {
+				best := getBestMoveWithInfo(ctx, &searchPos, depth, moveTime, searchHistory, func(info SearchInfo) {
 					writeLine(
 						"info depth", info.Depth,
 						"score cp", info.Score,
@@ -207,8 +211,13 @@ func parseGo(fields []string, stm int8) (int, int) {
 }
 
 func parsePosition(fields []string) (Position, bool) {
+	pos, _, ok := parsePositionWithHistory(fields)
+	return pos, ok
+}
+
+func parsePositionWithHistory(fields []string) (Position, RepetitionHistory, bool) {
 	if len(fields) < 2 {
-		return Position{}, false
+		return Position{}, nil, false
 	}
 
 	var pos Position
@@ -221,7 +230,7 @@ func parsePosition(fields []string) (Position, bool) {
 	case "startpos":
 		pos, err = PositionFromFEN(startFEN)
 		if err != nil {
-			return Position{}, false
+			return Position{}, nil, false
 		}
 		i++
 
@@ -238,16 +247,18 @@ func parsePosition(fields []string) (Position, bool) {
 
 		pos, err = PositionFromFEN(fen)
 		if err != nil {
-			return Position{}, false
+			return Position{}, nil, false
 		}
 
 	default:
-		return Position{}, false
+		return Position{}, nil, false
 	}
+
+	history := RepetitionHistory{positionKey(&pos): 1}
 
 	if i < len(fields) {
 		if fields[i] != "moves" {
-			return Position{}, false
+			return Position{}, nil, false
 		}
 		i++
 	}
@@ -255,12 +266,13 @@ func parsePosition(fields []string) (Position, bool) {
 	for ; i < len(fields); i++ {
 		move, ok := MoveFromUCI(&pos, fields[i])
 		if !ok {
-			return Position{}, false
+			return Position{}, nil, false
 		}
 		MakeMove(&pos, move)
+		history[positionKey(&pos)]++
 	}
 
-	return pos, true
+	return pos, history, true
 }
 
 func Perft(pos *Position, depth int) uint64 {
