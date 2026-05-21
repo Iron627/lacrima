@@ -3,7 +3,6 @@
 
 - written in Go
 - should be better structured than ethantron (my old python engine)
-  DONE:
+DONE:
   - movegen, board rep, legality filtering
-TODO:
-- negamax, a/b pruning
+  - basic material eval, negamax with a/b pruning

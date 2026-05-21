@@ -226,6 +226,11 @@ func filterLegalMoves(pos *Position, moves []Move) []Move {
 }
 
 func GetLegalMoves(pos *Position, colour int8) []Move {
+	originalSideToMove := pos.SideToMove
+	defer func() {
+		pos.SideToMove = originalSideToMove
+	}()
+
 	pos.SideToMove = colour
 	pseudoLegalMoves := GeneratePseudoLegalMoves(pos)
 	return filterLegalMoves(pos, pseudoLegalMoves)

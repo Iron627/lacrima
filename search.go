@@ -1,15 +1,24 @@
 package lacrima
 
-import stdtime "time"
+import (
+	"context"
+	stdtime "time"
+)
 
 const mateScore = 100000
 
-func searchTimedOut(deadline stdtime.Time) bool {
+func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+	}
+
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time) (int, bool) {
-	if searchTimedOut(deadline) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int) (int, bool) {
+	if searchStopped(ctx, deadline) {
 		return 0, false
 	}
 
@@ -17,7 +26,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 
 	if len(moves) == 0 {
 		if InCheck(pos, colour) {
-			return -mateScore + depth, true
+			return -mateScore + ply, true
 		}
 		return 0, true
 	}
@@ -29,7 +38,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	for _, move := range moves {
 		undo := MakeMove(pos, move)
 
-		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline)
+		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1)
 
 		UnmakeMove(pos, undo)
 
@@ -52,6 +61,10 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 }
 
 func GetBestMove(pos *Position, depth int, time int) Move {
+	return getBestMove(context.Background(), pos, depth, time)
+}
+
+func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
 	colour := pos.SideToMove
 	originalSideToMove := pos.SideToMove
 
@@ -70,17 +83,22 @@ func GetBestMove(pos *Position, depth int, time int) Move {
 	}
 
 	bestMove := moves[0]
+
+	if searchStopped(ctx, stdtime.Time{}) {
+		return bestMove
+	}
+
 	alpha := -mateScore
 	beta := mateScore
 
 	for _, move := range moves {
-		if searchTimedOut(deadline) {
+		if searchStopped(ctx, deadline) {
 			break
 		}
 
 		undo := MakeMove(pos, move)
 
-		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline)
+		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1)
 
 		UnmakeMove(pos, undo)
 
