@@ -10,27 +10,41 @@ func searchTimedOut(deadline stdtime.Time) bool {
 
 func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time) (int, bool) {
 	if searchTimedOut(deadline) {
-		return Eval(pos, colour), false
+		return 0, false
 	}
 
 	moves := GetLegalMoves(pos, colour)
-	if depth <= 0 || len(moves) == 0 {
+
+	if len(moves) == 0 {
+		if InCheck(pos, colour) {
+			return -mateScore + depth, true
+		}
+		return 0, true
+	}
+
+	if depth <= 0 {
 		return Eval(pos, colour), true
 	}
 
 	for _, move := range moves {
 		undo := MakeMove(pos, move)
+
 		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline)
+
 		UnmakeMove(pos, undo)
+
 		if !ok {
-			return alpha, false
+			return 0, false
 		}
+
 		score = -score
+
+		if score >= beta {
+			return beta, true
+		}
+
 		if score > alpha {
 			alpha = score
-		}
-		if alpha >= beta {
-			break
 		}
 	}
 
@@ -40,6 +54,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 func GetBestMove(pos *Position, depth int, time int) Move {
 	colour := pos.SideToMove
 	originalSideToMove := pos.SideToMove
+
 	defer func() {
 		pos.SideToMove = originalSideToMove
 	}()
@@ -56,21 +71,30 @@ func GetBestMove(pos *Position, depth int, time int) Move {
 
 	bestMove := moves[0]
 	alpha := -mateScore
+	beta := mateScore
+
 	for _, move := range moves {
 		if searchTimedOut(deadline) {
 			break
 		}
+
 		undo := MakeMove(pos, move)
-		score, ok := negamax(pos, depth-1, -mateScore, mateScore, -colour, deadline)
+
+		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline)
+
 		UnmakeMove(pos, undo)
+
 		if !ok {
 			break
 		}
+
 		score = -score
+
 		if score > alpha {
 			alpha = score
 			bestMove = move
 		}
 	}
+
 	return bestMove
 }
