@@ -96,7 +96,15 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			go func() {
 				defer close(done)
 
-				best := getBestMove(ctx, &searchPos, depth, moveTime)
+				best := getBestMoveWithInfo(ctx, &searchPos, depth, moveTime, func(info SearchInfo) {
+					writeLine(
+						"info depth", info.Depth,
+						"score cp", info.Score,
+						"nodes", info.Nodes,
+						"time", info.TimeMillis,
+						"pv", MoveToUCI(info.BestMove),
+					)
+				})
 
 				if searchID.Load() != id {
 					return

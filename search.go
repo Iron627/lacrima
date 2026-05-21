@@ -6,6 +6,19 @@ import (
 )
 
 const mateScore = 100000
+const infoInterval = stdtime.Second
+
+type SearchInfo struct {
+	Depth            int
+	Score            int
+	Nodes            uint64
+	TimeMillis       int64
+	BestMove         Move
+	CurrentMove      Move
+	CurrentMoveIndex int
+}
+
+type SearchInfoFunc func(SearchInfo)
 
 func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	select {
@@ -17,10 +30,12 @@ func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int) (int, bool) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64) (int, bool) {
 	if searchStopped(ctx, deadline) {
 		return 0, false
 	}
+
+	*nodes += 1
 
 	moves := GetLegalMoves(pos, colour)
 
@@ -38,7 +53,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	for _, move := range moves {
 		undo := MakeMove(pos, move)
 
-		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1)
+		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes)
 
 		UnmakeMove(pos, undo)
 
@@ -65,8 +80,13 @@ func GetBestMove(pos *Position, depth int, time int) Move {
 }
 
 func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
+	return getBestMoveWithInfo(ctx, pos, depth, time, nil)
+}
+
+func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int, onInfo SearchInfoFunc) Move {
 	colour := pos.SideToMove
 	originalSideToMove := pos.SideToMove
+	startTime := stdtime.Now()
 
 	defer func() {
 		pos.SideToMove = originalSideToMove
@@ -83,6 +103,9 @@ func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
 	}
 
 	bestMove := moves[0]
+	bestScore := -mateScore
+	var nodes uint64
+	lastInfoTime := startTime.Add(-infoInterval)
 
 	if searchStopped(ctx, stdtime.Time{}) {
 		return bestMove
@@ -91,14 +114,14 @@ func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
 	alpha := -mateScore
 	beta := mateScore
 
-	for _, move := range moves {
+	for i, move := range moves {
 		if searchStopped(ctx, deadline) {
 			break
 		}
 
 		undo := MakeMove(pos, move)
 
-		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1)
+		score, ok := negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes)
 
 		UnmakeMove(pos, undo)
 
@@ -110,7 +133,24 @@ func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
 
 		if score > alpha {
 			alpha = score
+			bestScore = score
 			bestMove = move
+		}
+
+		if onInfo != nil {
+			now := stdtime.Now()
+			if i == 0 || now.Sub(lastInfoTime) >= infoInterval || i == len(moves)-1 {
+				lastInfoTime = now
+				onInfo(SearchInfo{
+					Depth:            depth,
+					Score:            bestScore,
+					Nodes:            nodes,
+					TimeMillis:       now.Sub(startTime).Milliseconds(),
+					BestMove:         bestMove,
+					CurrentMove:      move,
+					CurrentMoveIndex: i + 1,
+				})
+			}
 		}
 	}
 
