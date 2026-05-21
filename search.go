@@ -6,7 +6,6 @@ import (
 )
 
 const mateScore = 100000
-const infoInterval = stdtime.Second
 const repetitionAvoidanceScore = -1
 const repetitionDrawScore = 0
 
@@ -118,20 +117,59 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 	}
 
 	bestMove := moves[0]
-	bestScore := -mateScore
-	var nodes uint64
-	lastInfoTime := startTime.Add(-infoInterval)
+	var totalNodes uint64
 
 	if searchStopped(ctx, stdtime.Time{}) {
 		return bestMove
 	}
 
+	if depth < 1 {
+		depth = 1
+	}
+
+	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
+		move, score, nodes, ok := searchDepth(ctx, pos, currentDepth, deadline, colour, history)
+		totalNodes += nodes
+
+		if !ok {
+			break
+		}
+
+		bestMove = move
+
+		if onInfo != nil {
+			onInfo(SearchInfo{
+				Depth:      currentDepth,
+				Score:      score,
+				Nodes:      totalNodes,
+				TimeMillis: stdtime.Since(startTime).Milliseconds(),
+				BestMove:   bestMove,
+			})
+		}
+
+		if searchStopped(ctx, deadline) {
+			break
+		}
+	}
+
+	return bestMove
+}
+
+func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory) (Move, int, uint64, bool) {
+	moves := GetLegalMoves(pos, colour)
+	if len(moves) == 0 {
+		return Move{}, 0, 0, true
+	}
+
+	bestMove := moves[0]
+	bestScore := -mateScore
+	var nodes uint64
 	alpha := -mateScore
 	beta := mateScore
 
-	for i, move := range moves {
+	for _, move := range moves {
 		if searchStopped(ctx, deadline) {
-			break
+			return bestMove, bestScore, nodes, false
 		}
 
 		undo := MakeMove(pos, move)
@@ -151,7 +189,7 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 		UnmakeMove(pos, undo)
 
 		if !ok {
-			break
+			return bestMove, bestScore, nodes, false
 		}
 
 		if score > bestScore {
@@ -166,23 +204,7 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 		if alpha >= beta {
 			break
 		}
-
-		if onInfo != nil {
-			now := stdtime.Now()
-			if i == 0 || now.Sub(lastInfoTime) >= infoInterval || i == len(moves)-1 {
-				lastInfoTime = now
-				onInfo(SearchInfo{
-					Depth:            depth,
-					Score:            bestScore,
-					Nodes:            nodes,
-					TimeMillis:       now.Sub(startTime).Milliseconds(),
-					BestMove:         bestMove,
-					CurrentMove:      move,
-					CurrentMoveIndex: i + 1,
-				})
-			}
-		}
 	}
 
-	return bestMove
+	return bestMove, bestScore, nodes, true
 }
