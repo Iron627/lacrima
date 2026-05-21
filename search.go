@@ -131,10 +131,17 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 
 		score = -score
 
-		if score > alpha {
-			alpha = score
+		if score > bestScore {
 			bestScore = score
 			bestMove = move
+		}
+
+		if score > alpha {
+			alpha = score
+		}
+
+		if alpha >= beta {
+			break
 		}
 
 		if onInfo != nil {
