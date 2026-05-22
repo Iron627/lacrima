@@ -43,6 +43,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	*nodes += 1
 
 	moves := GetLegalMoves(pos, colour)
+	moves = orderMoves(pos, moves)
 
 	if len(moves) == 0 {
 		if InCheck(pos, colour) {
@@ -160,7 +161,7 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 	if len(moves) == 0 {
 		return Move{}, 0, 0, true
 	}
-
+	moves = orderMoves(pos, moves)
 	bestMove := moves[0]
 	bestScore := -mateScore
 	var nodes uint64

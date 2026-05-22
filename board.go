@@ -10,6 +10,11 @@ type Move struct {
 	isDoublePawnPush bool
 }
 
+type ScoredMove struct {
+	Move  Move
+	Score int
+}
+
 type Position struct {
 	Board           Board
 	SideToMove      int8
@@ -65,6 +70,25 @@ func PieceType(piece int8) int8 {
 	return piece
 
 }
+func PieceValue(pieceType int8) int {
+	switch pieceType {
+	case 1:
+		return 100
+	case 2:
+		return 320
+	case 3:
+		return 330
+	case 4:
+		return 500
+	case 5:
+		return 900
+	case 6:
+		return 20000
+	default:
+		return 0
+	}
+}
+
 func IsOffBoard(square int) bool {
 	return (square & 0x88) != 0
 }
