@@ -5,4 +5,10 @@
 - should be better structured than ethantron (my old python engine)
 DONE:
   - movegen, board rep, legality filtering
-  - basic material eval, negamax with a/b pruning
+  - PESTO eval, negamax with a/b pruning
+  - move ordering based on mvv/lva
+  - beats ethantron in low tc, loses in high tc
+
+TODO:
+- transposition tables (already implemented position hashing for 3fold repetition)
+- optimizations

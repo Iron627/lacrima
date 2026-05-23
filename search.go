@@ -42,6 +42,10 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 
 	*nodes += 1
 
+	if depth <= 0 {
+		return Eval(pos, colour), true
+	}
+
 	moves := GetLegalMoves(pos, colour)
 	moves = orderMoves(pos, moves)
 
@@ -50,10 +54,6 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 			return -mateScore + ply, true
 		}
 		return 0, true
-	}
-
-	if depth <= 0 {
-		return Eval(pos, colour), true
 	}
 
 	for _, move := range moves {

@@ -2,6 +2,8 @@ package lacrima
 
 import "sort"
 
+const checkMoveBonus = 1000
+
 func ScoreMove(pos *Position, move Move) int {
 	score := 0
 	target := pos.Board[move.To]
@@ -12,14 +14,16 @@ func ScoreMove(pos *Position, move Move) int {
 		}
 	}
 	if target != Empty {
-		score += PieceValue(PieceType(target))
+		victim := PieceValue(PieceType(target))
+		attacker := PieceType(pos.Board[move.From])
+		score += victim + (7 - int(attacker))
 	}
 	if move.Promotion != 0 {
 		score += PieceValue(PieceType(move.Promotion))
 	}
 	undo := MakeMove(pos, move)
 	if InCheck(pos, pos.SideToMove) {
-		score += 1000
+		score += checkMoveBonus
 	}
 	UnmakeMove(pos, undo)
 	return score
