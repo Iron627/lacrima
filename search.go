@@ -8,6 +8,7 @@ import (
 const mateScore = 100000
 const repetitionAvoidanceScore = -1
 const repetitionDrawScore = 0
+const defaultTranspositionTableEntries = 1 << 18
 
 type SearchInfo struct {
 	Depth            int
@@ -31,7 +32,7 @@ func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory) (int, bool) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable) (int, bool) {
 	if searchStopped(ctx, deadline) {
 		return 0, false
 	}
@@ -46,8 +47,33 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		return Eval(pos, colour), true
 	}
 
+	key := positionKey(pos)
+	originalAlpha := alpha
+	var ttMove Move
+	if entry, ok := tt.Probe(key); ok {
+		ttMove = entry.Move
+		if entry.Depth >= depth {
+			switch entry.Flag {
+			case TTExact:
+				return entry.Score, true
+			case TTLowerBound:
+				if entry.Score > alpha {
+					alpha = entry.Score
+				}
+			case TTUpperBound:
+				if entry.Score < beta {
+					beta = entry.Score
+				}
+			}
+
+			if alpha >= beta {
+				return entry.Score, true
+			}
+		}
+	}
+
 	moves := GetLegalMoves(pos, colour)
-	moves = orderMoves(pos, moves)
+	moves = orderMoves(pos, moves, ttMove)
 
 	if len(moves) == 0 {
 		if InCheck(pos, colour) {
@@ -56,10 +82,13 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		return 0, true
 	}
 
+	bestMove := moves[0]
+	bestScore := -mateScore
+
 	for _, move := range moves {
 		undo := MakeMove(pos, move)
 
-		key, count := pushRepetition(history, pos)
+		repetitionKey, count := pushRepetition(history, pos)
 
 		var score int
 		var ok bool
@@ -67,10 +96,10 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 			score = repetitionDrawScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt)
 			score = -score
 		}
-		popRepetition(history, key)
+		popRepetition(history, repetitionKey)
 
 		UnmakeMove(pos, undo)
 
@@ -78,8 +107,14 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 			return 0, false
 		}
 
+		if score > bestScore {
+			bestScore = score
+			bestMove = move
+		}
+
 		if score >= beta {
-			return beta, true
+			tt.Store(key, depth, score, TTLowerBound, move)
+			return score, true
 		}
 
 		if score > alpha {
@@ -87,7 +122,13 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		}
 	}
 
-	return alpha, true
+	flag := TTExact
+	if bestScore <= originalAlpha {
+		flag = TTUpperBound
+	}
+	tt.Store(key, depth, bestScore, flag, bestMove)
+
+	return bestScore, true
 }
 
 func GetBestMove(pos *Position, depth int, time int) Move {
@@ -128,8 +169,9 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 		depth = 1
 	}
 
+	tt := NewTranspositionTable(defaultTranspositionTableEntries)
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
-		move, score, nodes, ok := searchDepth(ctx, pos, currentDepth, deadline, colour, history)
+		move, score, nodes, ok := searchDepth(ctx, pos, currentDepth, deadline, colour, history, tt)
 		totalNodes += nodes
 
 		if !ok {
@@ -156,12 +198,19 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 	return bestMove
 }
 
-func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory) (Move, int, uint64, bool) {
+func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory, tt *TranspositionTable) (Move, int, uint64, bool) {
 	moves := GetLegalMoves(pos, colour)
 	if len(moves) == 0 {
 		return Move{}, 0, 0, true
 	}
-	moves = orderMoves(pos, moves)
+
+	rootKey := positionKey(pos)
+	var ttMove Move
+	if entry, ok := tt.Probe(rootKey); ok {
+		ttMove = entry.Move
+	}
+
+	moves = orderMoves(pos, moves, ttMove)
 	bestMove := moves[0]
 	bestScore := -mateScore
 	var nodes uint64
@@ -177,15 +226,15 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 
 		var score int
 		var ok bool
-		key, count := pushRepetition(history, pos)
+		repetitionKey, count := pushRepetition(history, pos)
 		if count >= 3 {
 			score = repetitionAvoidanceScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt)
 			score = -score
 		}
-		popRepetition(history, key)
+		popRepetition(history, repetitionKey)
 
 		UnmakeMove(pos, undo)
 
@@ -203,9 +252,12 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 		}
 
 		if alpha >= beta {
+			tt.Store(rootKey, depth, score, TTLowerBound, move)
 			break
 		}
 	}
+
+	tt.Store(rootKey, depth, bestScore, TTExact, bestMove)
 
 	return bestMove, bestScore, nodes, true
 }

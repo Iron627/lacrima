@@ -3,6 +3,7 @@ package lacrima
 import "sort"
 
 const checkMoveBonus = 1000
+const preferredMoveBonus = 1000000
 
 func ScoreMove(pos *Position, move Move) int {
 	score := 0
@@ -29,12 +30,17 @@ func ScoreMove(pos *Position, move Move) int {
 	return score
 }
 
-func orderMoves(pos *Position, moves []Move) []Move {
+func orderMoves(pos *Position, moves []Move, preferredMove Move) []Move {
 	scoredMoves := make([]ScoredMove, len(moves))
 	for i, move := range moves {
+		score := ScoreMove(pos, move)
+		if move == preferredMove {
+			score += preferredMoveBonus
+		}
+
 		scoredMoves[i] = ScoredMove{
 			Move:  move,
-			Score: ScoreMove(pos, move),
+			Score: score,
 		}
 	}
 
