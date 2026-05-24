@@ -1,2 +1,4 @@
 cmd/lacrima/lacrima.exe
 cmd/lacrima/lacrima*    
+*.prof
+*.test
