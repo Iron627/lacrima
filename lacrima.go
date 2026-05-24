@@ -24,6 +24,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 
 	pos, _ := PositionFromFEN(startFEN)
 	history := RepetitionHistory{positionKey(&pos): 1}
+	tt := NewTranspositionTable(defaultTranspositionTableEntries)
 
 	var searchID atomic.Uint64
 	var searchCancel context.CancelFunc
@@ -66,8 +67,10 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			writeLine("readyok")
 
 		case "ucinewgame":
+			stopSearch(true)
 			pos, _ = PositionFromFEN(startFEN)
 			history = RepetitionHistory{positionKey(&pos): 1}
+			tt.Clear()
 
 		case "quit":
 			stopSearch(true)
@@ -100,7 +103,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			go func() {
 				defer close(done)
 
-				best := getBestMoveWithInfo(ctx, &searchPos, depth, moveTime, searchHistory, func(info SearchInfo) {
+				best := searchBestMove(ctx, &searchPos, depth, moveTime, searchHistory, func(info SearchInfo) {
 					if searchID.Load() != id {
 						return
 					}
@@ -112,7 +115,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 						"time", info.TimeMillis,
 						"pv", MoveToUCI(info.BestMove),
 					)
-				})
+				}, tt)
 
 				if searchID.Load() != id {
 					return

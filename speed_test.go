@@ -166,7 +166,7 @@ func BenchmarkSearch(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
 				pos := mustBenchPosition(b, tc.fen)
-				benchMoveSink = getBestMoveWithInfo(context.Background(), &pos, tc.depth, 0, nil, nil)
+				benchMoveSink = searchBestMove(context.Background(), &pos, tc.depth, 0, nil, nil, NewTranspositionTable(defaultTranspositionTableEntries))
 			}
 		})
 	}

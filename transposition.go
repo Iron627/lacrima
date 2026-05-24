@@ -31,6 +31,14 @@ func NewTranspositionTable(size uint64) *TranspositionTable {
 	}
 }
 
+func (tt *TranspositionTable) Clear() {
+	if tt == nil {
+		return
+	}
+
+	clear(tt.entries)
+}
+
 func (tt *TranspositionTable) Probe(key uint64) (TTEntry, bool) {
 	if tt == nil || len(tt.entries) == 0 {
 		return TTEntry{}, false

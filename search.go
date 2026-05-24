@@ -136,10 +136,10 @@ func GetBestMove(pos *Position, depth int, time int) Move {
 }
 
 func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
-	return getBestMoveWithInfo(ctx, pos, depth, time, nil, nil)
+	return searchBestMove(ctx, pos, depth, time, nil, nil, NewTranspositionTable(defaultTranspositionTableEntries))
 }
 
-func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc) Move {
+func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable) Move {
 	colour := pos.SideToMove
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
@@ -169,7 +169,6 @@ func getBestMoveWithInfo(ctx context.Context, pos *Position, depth int, time int
 		depth = 1
 	}
 
-	tt := NewTranspositionTable(defaultTranspositionTableEntries)
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
 		move, score, nodes, ok := searchDepth(ctx, pos, currentDepth, deadline, colour, history, tt)
 		totalNodes += nodes
