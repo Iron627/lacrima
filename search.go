@@ -9,6 +9,7 @@ const mateScore = 100000
 const repetitionAvoidanceScore = -1
 const repetitionDrawScore = 0
 const defaultTranspositionTableEntries = 1 << 18
+const nullMoveReduction = 2
 
 type SearchInfo struct {
 	Depth            int
@@ -32,7 +33,7 @@ func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable) (int, bool) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable, allowNull bool) (int, bool) {
 	if searchStopped(ctx, deadline) {
 		return 0, false
 	}
@@ -72,12 +73,28 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		}
 	}
 
+	kingSquare := FindKing(pos, colour)
+	inCheck := InCheck(pos, colour, kingSquare)
+	if allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) {
+		undo := MakeNullMove(pos)
+		score, ok := negamax(pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, deadline, ctx, ply+1, nodes, history, tt, false)
+		score = -score
+		UnmakeNullMove(pos, undo)
+
+		if !ok {
+			return 0, false
+		}
+		if score >= beta {
+			tt.Store(key, depth, beta, TTLowerBound, Move{})
+			return beta, true
+		}
+	}
+
 	moves := GetLegalMoves(pos, colour)
 	moves = orderMoves(pos, moves, ttMove)
 
 	if len(moves) == 0 {
-		kingSquare := FindKing(pos, colour)
-		if InCheck(pos, colour, kingSquare) {
+		if inCheck {
 			return -mateScore + ply, true
 		}
 		return 0, true
@@ -97,7 +114,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 			score = repetitionDrawScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt, true)
 			score = -score
 		}
 		popRepetition(history, repetitionKey)
@@ -130,6 +147,21 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	tt.Store(key, depth, bestScore, flag, bestMove)
 
 	return bestScore, true
+}
+
+func hasNonPawnMaterial(pos *Position, colour int8) bool {
+	for square, piece := range pos.Board {
+		if IsOffBoard(square) || piece == Empty || (piece > 0) != (colour > 0) {
+			continue
+		}
+
+		pieceType := PieceType(piece)
+		if pieceType != WhitePawn && pieceType != WhiteKing {
+			return true
+		}
+	}
+
+	return false
 }
 
 func GetBestMove(pos *Position, depth int, time int) Move {
@@ -231,7 +263,7 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 			score = repetitionAvoidanceScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt, true)
 			score = -score
 		}
 		popRepetition(history, repetitionKey)

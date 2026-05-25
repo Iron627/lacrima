@@ -31,6 +31,12 @@ type Undo struct {
 	HalfmoveClock   int
 	FullmoveNumber  int
 }
+type NullUndo struct {
+	SideToMove      int8
+	EnPassantSquare int8
+	HalfmoveClock   int
+	FullmoveNumber  int
+}
 
 const (
 	WhiteKingside  uint8 = 1 << 0 // 0001
@@ -303,6 +309,33 @@ func MakeMove(pos *Position, move Move) Undo {
 	pos.SideToMove = -pos.SideToMove
 	return undo
 }
+
+func MakeNullMove(pos *Position) NullUndo {
+	undo := NullUndo{
+		SideToMove:      pos.SideToMove,
+		EnPassantSquare: pos.EnPassantSquare,
+		HalfmoveClock:   pos.HalfmoveClock,
+		FullmoveNumber:  pos.FullmoveNumber,
+	}
+
+	if pos.SideToMove < 0 {
+		pos.FullmoveNumber++
+	}
+
+	pos.SideToMove = -pos.SideToMove
+	pos.EnPassantSquare = -1
+	pos.HalfmoveClock++
+
+	return undo
+}
+
+func UnmakeNullMove(pos *Position, undo NullUndo) {
+	pos.SideToMove = undo.SideToMove
+	pos.EnPassantSquare = undo.EnPassantSquare
+	pos.HalfmoveClock = undo.HalfmoveClock
+	pos.FullmoveNumber = undo.FullmoveNumber
+}
+
 func UnmakeMove(pos *Position, undo Undo) {
 	move := undo.Move
 
