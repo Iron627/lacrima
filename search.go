@@ -76,7 +76,8 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	moves = orderMoves(pos, moves, ttMove)
 
 	if len(moves) == 0 {
-		if InCheck(pos, colour) {
+		kingSquare := FindKing(pos, colour)
+		if InCheck(pos, colour, kingSquare) {
 			return -mateScore + ply, true
 		}
 		return 0, true

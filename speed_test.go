@@ -75,7 +75,8 @@ func BenchmarkInCheck(b *testing.B) {
 		pos := mustBenchPosition(b, tc.fen)
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
-				benchBoolSink = InCheck(&pos, pos.SideToMove)
+				kingSquare := FindKing(&pos, pos.SideToMove)
+				benchBoolSink = InCheck(&pos, pos.SideToMove, kingSquare)
 			}
 		})
 	}

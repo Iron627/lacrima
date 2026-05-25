@@ -183,9 +183,11 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 
 func filterLegalMoves(pos *Position, moves []Move) []Move {
 	var legalMoves []Move
+	kingSquare := FindKing(pos, pos.SideToMove)
 
 	for _, move := range moves {
 		movingSide := pos.SideToMove
+		movingPiece := pos.Board[move.From]
 
 		if move.isCastling {
 			var kingSquares []int
@@ -214,8 +216,11 @@ func filterLegalMoves(pos *Position, moves []Move) []Move {
 		}
 
 		undo := MakeMove(pos, move)
-
-		if !InCheck(pos, movingSide) {
+		checkedKingSquare := kingSquare
+		if movingPiece == WhiteKing || movingPiece == BlackKing {
+			checkedKingSquare = move.To
+		}
+		if !InCheck(pos, movingSide, checkedKingSquare) {
 			legalMoves = append(legalMoves, move)
 		}
 

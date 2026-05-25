@@ -180,8 +180,7 @@ func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 	return false
 }
 
-func InCheck(pos *Position, color int8) bool {
-	kingSquare := FindKing(pos, color)
+func InCheck(pos *Position, color int8, kingSquare int) bool {
 	if kingSquare == -1 {
 		return false
 	}
