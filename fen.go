@@ -14,6 +14,8 @@ func PositionFromFEN(fen string) (Position, error) {
 	}
 
 	var pos Position
+	pos.WhiteKingSquare = -1
+	pos.BlackKingSquare = -1
 
 	for i := range pos.Board {
 		if IsOffBoard(i) {
@@ -59,6 +61,7 @@ func PositionFromFEN(fen string) (Position, error) {
 				pos.Board[square] = WhiteQueen
 			case 'K':
 				pos.Board[square] = WhiteKing
+				pos.WhiteKingSquare = square
 			case 'p':
 				pos.Board[square] = BlackPawn
 			case 'n':
@@ -71,6 +74,7 @@ func PositionFromFEN(fen string) (Position, error) {
 				pos.Board[square] = BlackQueen
 			case 'k':
 				pos.Board[square] = BlackKing
+				pos.BlackKingSquare = square
 			default:
 				return Position{}, errors.New("invalid fen")
 			}

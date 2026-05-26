@@ -22,6 +22,8 @@ type Position struct {
 	EnPassantSquare int8
 	HalfmoveClock   int
 	FullmoveNumber  int
+	WhiteKingSquare int
+	BlackKingSquare int
 }
 type Undo struct {
 	Move            Move
@@ -30,6 +32,8 @@ type Undo struct {
 	EnPassantSquare int8
 	HalfmoveClock   int
 	FullmoveNumber  int
+	WhiteKingSquare int
+	BlackKingSquare int
 }
 type NullUndo struct {
 	SideToMove      int8
@@ -100,14 +104,25 @@ func IsOffBoard(square int) bool {
 }
 func FindKing(pos *Position, color int8) int {
 	king := WhiteKing
+	cachedSquare := pos.WhiteKingSquare
 	if color < 0 {
 		king = BlackKing
+		cachedSquare = pos.BlackKingSquare
+	}
+	if cachedSquare >= 0 && cachedSquare < len(pos.Board) &&
+		!IsOffBoard(cachedSquare) && int(pos.Board[cachedSquare]) == king {
+		return cachedSquare
 	}
 	for i, piece := range pos.Board {
 		if IsOffBoard(i) {
 			continue
 		}
 		if int(piece) == king {
+			if color > 0 {
+				pos.WhiteKingSquare = i
+			} else {
+				pos.BlackKingSquare = i
+			}
 			return i
 		}
 	}
@@ -213,6 +228,8 @@ func MakeMove(pos *Position, move Move) Undo {
 		EnPassantSquare: pos.EnPassantSquare,
 		HalfmoveClock:   pos.HalfmoveClock,
 		FullmoveNumber:  pos.FullmoveNumber,
+		WhiteKingSquare: pos.WhiteKingSquare,
+		BlackKingSquare: pos.BlackKingSquare,
 	}
 
 	pos.Board[move.To] = piece
@@ -244,6 +261,13 @@ func MakeMove(pos *Position, move Move) Undo {
 		} else {
 			pos.Board[move.To] = -move.Promotion
 		}
+	}
+
+	switch piece {
+	case WhiteKing:
+		pos.WhiteKingSquare = move.To
+	case BlackKing:
+		pos.BlackKingSquare = move.To
 	}
 
 	if move.isCastling {
@@ -353,6 +377,8 @@ func UnmakeMove(pos *Position, undo Undo) {
 	pos.CastlingRights = undo.CastlingRights
 	pos.HalfmoveClock = undo.HalfmoveClock
 	pos.FullmoveNumber = undo.FullmoveNumber
+	pos.WhiteKingSquare = undo.WhiteKingSquare
+	pos.BlackKingSquare = undo.BlackKingSquare
 
 	if move.isEnPassant {
 		pos.Board[move.To] = Empty
