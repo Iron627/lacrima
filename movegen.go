@@ -1,7 +1,8 @@
 package lacrima
 
-func slide(pos *Position, from int) []Move {
-	var moves []Move
+const pseudoMoveCapacity = 32
+
+func slide(pos *Position, from int, moves []Move) []Move {
 	var directions []int
 	piece := pos.Board[from]
 
@@ -30,11 +31,11 @@ func slide(pos *Position, from int) []Move {
 			}
 		}
 	}
+
 	return moves
 }
 
-func knight(pos *Position, from int) []Move {
-	var moves []Move
+func knight(pos *Position, from int, moves []Move) []Move {
 	piece := pos.Board[from]
 	if PieceType(piece) != 2 {
 		return moves
@@ -52,8 +53,7 @@ func knight(pos *Position, from int) []Move {
 	return moves
 }
 
-func pawn(pos *Position, from int) []Move {
-	var moves []Move
+func pawn(pos *Position, from int, moves []Move) []Move {
 	var dir, startRank int
 	piece := pos.Board[from]
 
@@ -119,8 +119,8 @@ func pawn(pos *Position, from int) []Move {
 
 	return moves
 }
-func king(pos *Position, from int) []Move {
-	var moves []Move
+func king(pos *Position, from int, moves []Move) []Move {
+
 	piece := pos.Board[from]
 	if PieceType(piece) != 6 {
 		return moves
@@ -156,11 +156,11 @@ func king(pos *Position, from int) []Move {
 			moves = append(moves, Move{From: from, To: 114, isCastling: true})
 		}
 	}
+
 	return moves
 }
 func GeneratePseudoLegalMoves(pos *Position) []Move {
-	var moves []Move
-
+	moves := make([]Move, 0, pseudoMoveCapacity)
 	for i, piece := range pos.Board {
 		if IsOffBoard(i) || (piece == Empty || (piece > 0) != (pos.SideToMove > 0)) {
 			continue
@@ -168,13 +168,13 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 
 		switch PieceType(piece) {
 		case 1:
-			moves = append(moves, pawn(pos, i)...)
+			moves = pawn(pos, i, moves)
 		case 2:
-			moves = append(moves, knight(pos, i)...)
+			moves = knight(pos, i, moves)
 		case 3, 4, 5:
-			moves = append(moves, slide(pos, i)...)
+			moves = slide(pos, i, moves)
 		case 6:
-			moves = append(moves, king(pos, i)...)
+			moves = king(pos, i, moves)
 		}
 	}
 
@@ -182,7 +182,7 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 }
 
 func filterLegalMoves(pos *Position, moves []Move) []Move {
-	var legalMoves []Move
+	legalMoves := make([]Move, 0, len(moves))
 	kingSquare := FindKing(pos, pos.SideToMove)
 
 	for _, move := range moves {
