@@ -2,34 +2,63 @@ package lacrima
 
 const pseudoMoveCapacity = 32
 
+var rookDirections = [...]int{N, S, E, W}
+var bishopDirections = [...]int{NE, SE, NW, SW}
+var queenDirections = [...]int{N, S, E, W, NE, SE, NW, SW}
+var kingDirections = [...]int{N, S, E, W, NE, SE, NW, SW}
+var sideCaptureDirections = [...]int{E, W}
+
 func slide(pos *Position, from int, moves []Move) []Move {
-	var directions []int
 	piece := pos.Board[from]
 
 	switch PieceType(piece) {
 	case 4:
-		directions = []int{N, S, E, W}
-	case 3:
-		directions = []int{NE, SE, NW, SW}
-	case 5:
-		directions = []int{N, S, E, W, NE, SE, NW, SW}
-	default:
-		return moves
-	}
+		for _, dir := range rookDirections {
+			for to := from + dir; !IsOffBoard(to); to += dir {
+				target := pos.Board[to]
 
-	for _, dir := range directions {
-		for to := from + dir; !IsOffBoard(to); to += dir {
-			target := pos.Board[to]
-
-			if target == Empty {
-				moves = append(moves, Move{From: from, To: to})
-			} else {
-				if !SameColor(piece, target) {
+				if target == Empty {
 					moves = append(moves, Move{From: from, To: to})
+				} else {
+					if !SameColor(piece, target) {
+						moves = append(moves, Move{From: from, To: to})
+					}
+					break
 				}
-				break
 			}
 		}
+	case 3:
+		for _, dir := range bishopDirections {
+			for to := from + dir; !IsOffBoard(to); to += dir {
+				target := pos.Board[to]
+
+				if target == Empty {
+					moves = append(moves, Move{From: from, To: to})
+				} else {
+					if !SameColor(piece, target) {
+						moves = append(moves, Move{From: from, To: to})
+					}
+					break
+				}
+			}
+		}
+	case 5:
+		for _, dir := range queenDirections {
+			for to := from + dir; !IsOffBoard(to); to += dir {
+				target := pos.Board[to]
+
+				if target == Empty {
+					moves = append(moves, Move{From: from, To: to})
+				} else {
+					if !SameColor(piece, target) {
+						moves = append(moves, Move{From: from, To: to})
+					}
+					break
+				}
+			}
+		}
+	default:
+		return moves
 	}
 
 	return moves
@@ -88,7 +117,7 @@ func pawn(pos *Position, from int, moves []Move) []Move {
 		}
 	}
 
-	for _, sideDir := range []int{E, W} {
+	for _, sideDir := range sideCaptureDirections {
 		captureTo := from + dir + sideDir
 		if IsOffBoard(captureTo) {
 			continue
@@ -107,7 +136,7 @@ func pawn(pos *Position, from int, moves []Move) []Move {
 	}
 
 	if pos.EnPassantSquare != -1 {
-		for _, sideDir := range []int{E, W} {
+		for _, sideDir := range sideCaptureDirections {
 			epTo := from + dir + sideDir
 			capturedSquare := from + sideDir
 			if !IsOffBoard(epTo) && epTo == int(pos.EnPassantSquare) &&
@@ -125,7 +154,7 @@ func king(pos *Position, from int, moves []Move) []Move {
 	if PieceType(piece) != 6 {
 		return moves
 	}
-	for _, dir := range []int{N, S, E, W, NE, SE, NW, SW} {
+	for _, dir := range kingDirections {
 		to := from + dir
 		if IsOffBoard(to) {
 			continue
@@ -159,8 +188,11 @@ func king(pos *Position, from int, moves []Move) []Move {
 
 	return moves
 }
-func GeneratePseudoLegalMoves(pos *Position) []Move {
-	moves := make([]Move, 0, pseudoMoveCapacity)
+func GeneratePseudoLegalMovesInto(pos *Position, moves []Move) []Move {
+	if cap(moves) == 0 {
+		moves = make([]Move, 0, pseudoMoveCapacity)
+	}
+	moves = moves[:0]
 	for i, piece := range pos.Board {
 		if IsOffBoard(i) || (piece == Empty || (piece > 0) != (pos.SideToMove > 0)) {
 			continue
@@ -181,8 +213,15 @@ func GeneratePseudoLegalMoves(pos *Position) []Move {
 	return moves
 }
 
-func filterLegalMoves(pos *Position, moves []Move) []Move {
-	legalMoves := make([]Move, 0, len(moves))
+func GeneratePseudoLegalMoves(pos *Position) []Move {
+	return GeneratePseudoLegalMovesInto(pos, make([]Move, 0, pseudoMoveCapacity))
+}
+
+func filterLegalMovesInto(pos *Position, moves []Move, legalMoves []Move) []Move {
+	legalMoves = legalMoves[:0]
+	if cap(legalMoves) < len(moves) {
+		legalMoves = make([]Move, 0, len(moves))
+	}
 	kingSquare := FindKing(pos, pos.SideToMove)
 
 	for _, move := range moves {
@@ -190,28 +229,23 @@ func filterLegalMoves(pos *Position, moves []Move) []Move {
 		movingPiece := pos.Board[move.From]
 
 		if move.isCastling {
-			var kingSquares []int
-
 			switch move.To {
 			case 6:
-				kingSquares = []int{4, 5, 6}
-			case 2:
-				kingSquares = []int{4, 3, 2}
-			case 118:
-				kingSquares = []int{116, 117, 118}
-			case 114:
-				kingSquares = []int{116, 115, 114}
-			}
-
-			illegalCastle := false
-			for _, sq := range kingSquares {
-				if IsSquareAttacked(pos, sq, -movingSide) {
-					illegalCastle = true
-					break
+				if IsSquareAttacked(pos, 4, -movingSide) || IsSquareAttacked(pos, 5, -movingSide) || IsSquareAttacked(pos, 6, -movingSide) {
+					continue
 				}
-			}
-			if illegalCastle {
-				continue
+			case 2:
+				if IsSquareAttacked(pos, 4, -movingSide) || IsSquareAttacked(pos, 3, -movingSide) || IsSquareAttacked(pos, 2, -movingSide) {
+					continue
+				}
+			case 118:
+				if IsSquareAttacked(pos, 116, -movingSide) || IsSquareAttacked(pos, 117, -movingSide) || IsSquareAttacked(pos, 118, -movingSide) {
+					continue
+				}
+			case 114:
+				if IsSquareAttacked(pos, 116, -movingSide) || IsSquareAttacked(pos, 115, -movingSide) || IsSquareAttacked(pos, 114, -movingSide) {
+					continue
+				}
 			}
 		}
 
@@ -230,13 +264,21 @@ func filterLegalMoves(pos *Position, moves []Move) []Move {
 	return legalMoves
 }
 
+func filterLegalMoves(pos *Position, moves []Move) []Move {
+	return filterLegalMovesInto(pos, moves, make([]Move, 0, len(moves)))
+}
+
 func GetLegalMoves(pos *Position, colour int8) []Move {
+	return getLegalMovesInto(pos, colour, make([]Move, 0, pseudoMoveCapacity), nil)
+}
+
+func getLegalMovesInto(pos *Position, colour int8, pseudoMoves []Move, legalMoves []Move) []Move {
 	originalSideToMove := pos.SideToMove
 	defer func() {
 		pos.SideToMove = originalSideToMove
 	}()
 
 	pos.SideToMove = colour
-	pseudoLegalMoves := GeneratePseudoLegalMoves(pos)
-	return filterLegalMoves(pos, pseudoLegalMoves)
+	pseudoLegalMoves := GeneratePseudoLegalMovesInto(pos, pseudoMoves)
+	return filterLegalMovesInto(pos, pseudoLegalMoves, legalMoves)
 }

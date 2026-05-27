@@ -90,7 +90,9 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		}
 	}
 
-	moves := GetLegalMoves(pos, colour)
+	var pseudoBuf [256]Move
+	var legalBuf [256]Move
+	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
 	moves = orderMoves(pos, moves, ttMove)
 
 	if len(moves) == 0 {
@@ -186,7 +188,9 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		deadline = stdtime.Now().Add(stdtime.Duration(time) * stdtime.Millisecond)
 	}
 
-	moves := GetLegalMoves(pos, colour)
+	var pseudoBuf [256]Move
+	var legalBuf [256]Move
+	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
 	if len(moves) == 0 {
 		return Move{}
 	}
@@ -231,7 +235,9 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 }
 
 func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory, tt *TranspositionTable) (Move, int, uint64, bool) {
-	moves := GetLegalMoves(pos, colour)
+	var pseudoBuf [256]Move
+	var legalBuf [256]Move
+	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
 	if len(moves) == 0 {
 		return Move{}, 0, 0, true
 	}

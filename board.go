@@ -148,11 +148,21 @@ func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 		king = BlackKing
 	}
 
-	pawnOrigins := []int{square + N + W, square + N + E}
 	if byColor < 0 {
-		pawnOrigins = []int{square + S + W, square + S + E}
-	}
-	for _, from := range pawnOrigins {
+		from := square + S + W
+		if !IsOffBoard(from) && pos.Board[from] == pawn {
+			return true
+		}
+		from = square + S + E
+		if !IsOffBoard(from) && pos.Board[from] == pawn {
+			return true
+		}
+	} else {
+		from := square + N + W
+		if !IsOffBoard(from) && pos.Board[from] == pawn {
+			return true
+		}
+		from = square + N + E
 		if !IsOffBoard(from) && pos.Board[from] == pawn {
 			return true
 		}
@@ -165,7 +175,7 @@ func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 		}
 	}
 
-	for _, dir := range []int{N, S, E, W} {
+	for _, dir := range rookDirections {
 		for from := square + dir; !IsOffBoard(from); from += dir {
 			piece := pos.Board[from]
 			if piece == Empty {
@@ -178,7 +188,7 @@ func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 		}
 	}
 
-	for _, dir := range []int{NE, SE, NW, SW} {
+	for _, dir := range bishopDirections {
 		for from := square + dir; !IsOffBoard(from); from += dir {
 			piece := pos.Board[from]
 			if piece == Empty {
@@ -191,7 +201,7 @@ func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 		}
 	}
 
-	for _, dir := range []int{N, S, E, W, NE, SE, NW, SW} {
+	for _, dir := range kingDirections {
 		from := square + dir
 		if !IsOffBoard(from) && pos.Board[from] == king {
 			return true
