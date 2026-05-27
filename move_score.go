@@ -4,6 +4,7 @@ import "sort"
 
 const checkMoveBonus = 1000
 const preferredMoveBonus = 1000000
+const killerMoveBonus = 900000
 
 func ScoreMove(pos *Position, move Move) int {
 	score := 0
@@ -31,12 +32,14 @@ func ScoreMove(pos *Position, move Move) int {
 	return score
 }
 
-func orderMoves(pos *Position, moves []Move, preferredMove Move) []Move {
+func orderMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move) []Move {
 	scoredMoves := make([]ScoredMove, len(moves))
 	for i, move := range moves {
 		score := ScoreMove(pos, move)
 		if move == preferredMove {
 			score += preferredMoveBonus
+		} else if move == killerA || move == killerB {
+			score += killerMoveBonus
 		}
 
 		scoredMoves[i] = ScoredMove{

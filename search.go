@@ -10,6 +10,7 @@ const repetitionAvoidanceScore = -1
 const repetitionDrawScore = 0
 const defaultTranspositionTableEntries = 1 << 18
 const nullMoveReduction = 2
+const maxSearchPly = 128
 
 type SearchInfo struct {
 	Depth            int
@@ -33,7 +34,7 @@ func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable, allowNull bool) (int, bool) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable, allowNull bool, killers *[maxSearchPly][2]Move) (int, bool) {
 	if searchStopped(ctx, deadline) {
 		return 0, false
 	}
@@ -77,7 +78,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	inCheck := InCheck(pos, colour, kingSquare)
 	if allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) {
 		undo := MakeNullMove(pos)
-		score, ok := negamax(pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, deadline, ctx, ply+1, nodes, history, tt, false)
+		score, ok := negamax(pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, deadline, ctx, ply+1, nodes, history, tt, false, killers)
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -93,7 +94,12 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	var pseudoBuf [256]Move
 	var legalBuf [256]Move
 	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
-	moves = orderMoves(pos, moves, ttMove)
+	var killerA, killerB Move
+	if ply >= 0 && ply < maxSearchPly {
+		killerA = killers[ply][0]
+		killerB = killers[ply][1]
+	}
+	moves = orderMoves(pos, moves, ttMove, killerA, killerB)
 
 	if len(moves) == 0 {
 		if inCheck {
@@ -116,7 +122,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 			score = repetitionDrawScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt, true)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt, true, killers)
 			score = -score
 		}
 		popRepetition(history, repetitionKey)
@@ -133,6 +139,9 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		}
 
 		if score >= beta {
+			if ply >= 0 && ply < maxSearchPly && isQuietMove(pos, move) {
+				storeKiller(killers, ply, move)
+			}
 			tt.Store(key, depth, score, TTLowerBound, move)
 			return score, true
 		}
@@ -235,6 +244,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 }
 
 func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory, tt *TranspositionTable) (Move, int, uint64, bool) {
+	var killers [maxSearchPly][2]Move
 	var pseudoBuf [256]Move
 	var legalBuf [256]Move
 	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
@@ -248,7 +258,7 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 		ttMove = entry.Move
 	}
 
-	moves = orderMoves(pos, moves, ttMove)
+	moves = orderMoves(pos, moves, ttMove, Move{}, Move{})
 	bestMove := moves[0]
 	bestScore := -mateScore
 	var nodes uint64
@@ -269,7 +279,7 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 			score = repetitionAvoidanceScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt, true)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt, true, &killers)
 			score = -score
 		}
 		popRepetition(history, repetitionKey)
@@ -298,4 +308,19 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 	tt.Store(rootKey, depth, bestScore, TTExact, bestMove)
 
 	return bestMove, bestScore, nodes, true
+}
+
+func isQuietMove(pos *Position, move Move) bool {
+	if move.isEnPassant || move.Promotion != 0 || move.isCastling {
+		return false
+	}
+	return pos.Board[move.To] == Empty
+}
+
+func storeKiller(killers *[maxSearchPly][2]Move, ply int, move Move) {
+	if killers[ply][0] == move {
+		return
+	}
+	killers[ply][1] = killers[ply][0]
+	killers[ply][0] = move
 }
