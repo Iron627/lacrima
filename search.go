@@ -34,7 +34,7 @@ func searchStopped(ctx context.Context, deadline stdtime.Time) bool {
 	return !deadline.IsZero() && stdtime.Now().After(deadline)
 }
 
-func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable, allowNull bool, killers *[maxSearchPly][2]Move) (int, bool) {
+func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, history RepetitionHistory, tt *TranspositionTable, allowNull bool, killers *[maxSearchPly][2]Move, isCheckExtended bool) (int, bool) {
 	if searchStopped(ctx, deadline) {
 		return 0, false
 	}
@@ -44,8 +44,13 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 	}
 
 	*nodes += 1
+	kingSquare := FindKing(pos, colour)
+	inCheck := InCheck(pos, colour, kingSquare)
 
 	if depth <= 0 {
+		if !isCheckExtended && inCheck {
+			return negamax(pos, 1, alpha, beta, colour, deadline, ctx, ply, nodes, history, tt, allowNull, killers, true)
+		}
 		return Eval(pos, colour), true
 	}
 
@@ -74,11 +79,9 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		}
 	}
 
-	kingSquare := FindKing(pos, colour)
-	inCheck := InCheck(pos, colour, kingSquare)
 	if allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) {
 		undo := MakeNullMove(pos)
-		score, ok := negamax(pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, deadline, ctx, ply+1, nodes, history, tt, false, killers)
+		score, ok := negamax(pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, deadline, ctx, ply+1, nodes, history, tt, false, killers, isCheckExtended)
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -122,7 +125,7 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 			score = repetitionDrawScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt, true, killers)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, history, tt, true, killers, isCheckExtended)
 			score = -score
 		}
 		popRepetition(history, repetitionKey)
@@ -279,7 +282,7 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 			score = repetitionAvoidanceScore
 			ok = true
 		} else {
-			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt, true, &killers)
+			score, ok = negamax(pos, depth-1, -beta, -alpha, -colour, deadline, ctx, 1, &nodes, history, tt, true, &killers, false)
 			score = -score
 		}
 		popRepetition(history, repetitionKey)
