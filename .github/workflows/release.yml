@@ -1,0 +1,24 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and upload binaries
+        uses: wangyoucao577/go-release-action@v1.55
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          project_path: "./cmd/lacrima"
+          binary_name: "lacrima"
+          goos: linux,darwin,windows
+          goarch: amd64
