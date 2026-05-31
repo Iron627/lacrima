@@ -1,24 +1,43 @@
-name: Release
+name: Auto Release
 
 on:
-  release:
-    types: [created]
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  release:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Create or update GitHub release
+        run: |
+          gh release create latest \
+            --title "Latest Build" \
+            --notes "Automated release from commit $GITHUB_SHA" \
+            || gh release edit latest \
+            --title "Latest Build" \
+            --notes "Automated release from commit $GITHUB_SHA"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and upload binaries
         uses: wangyoucao577/go-release-action@v1.55
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          project_path: "./cmd/lacrima"
-          binary_name: "lacrima"
-          goos: linux,darwin,windows
-          goarch: amd64
+          project_path: ./cmd/lacrima
+          binary_name: lacrima
+          goos: ${{ matrix.goos }}
+          goarch: ${{ matrix.goarch }}
+          release_tag: latest
+          overwrite: true
