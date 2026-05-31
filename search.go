@@ -51,6 +51,9 @@ func negamax(pos *Position, depth int, alpha int, beta int, colour int8, deadlin
 		if !isCheckExtended && inCheck {
 			return negamax(pos, 1, alpha, beta, colour, deadline, ctx, ply, nodes, history, tt, allowNull, killers, true)
 		}
+		if !inCheck {
+			return quiesce(pos, alpha, beta, colour, deadline, ctx, ply, nodes, tt)
+		}
 		return Eval(pos, colour), true
 	}
 
@@ -318,6 +321,126 @@ func isQuietMove(pos *Position, move Move) bool {
 		return false
 	}
 	return pos.Board[move.To] == Empty
+}
+
+func quiesce(pos *Position, alpha int, beta int, colour int8, deadline stdtime.Time, ctx context.Context, ply int, nodes *uint64, tt *TranspositionTable) (int, bool) {
+	if searchStopped(ctx, deadline) {
+		return 0, false
+	}
+
+	*nodes++
+
+	key := positionKey(pos)
+	originalAlpha := alpha
+	kingSquare := FindKing(pos, colour)
+	inCheck := InCheck(pos, colour, kingSquare)
+
+	if entry, ok := tt.Probe(key); ok {
+		switch entry.Flag {
+		case TTExact:
+			return entry.Score, true
+		case TTLowerBound:
+			if entry.Score > alpha {
+				alpha = entry.Score
+			}
+		case TTUpperBound:
+			if entry.Score < beta {
+				beta = entry.Score
+			}
+		}
+		if alpha >= beta {
+			return entry.Score, true
+		}
+	}
+
+	if !inCheck {
+		score := Eval(pos, colour)
+
+		if score >= beta {
+			tt.Store(key, 0, score, TTLowerBound, Move{})
+			return score, true
+		}
+		if score > alpha {
+			alpha = score
+		}
+	}
+
+	var pseudoMoveBuffer [256]Move
+	var legalMoveBuffer [256]Move
+	var moves []Move
+	if inCheck {
+		moves = getLegalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
+		if len(moves) == 0 {
+			score := -mateScore + ply
+			tt.Store(key, 0, score, TTExact, Move{})
+			return score, true
+		}
+	} else {
+		moves = getLegalTacticalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
+	}
+
+	bestMove := Move{}
+
+	for _, move := range moves {
+		undo := MakeMove(pos, move)
+
+		score, ok := quiesce(pos, -beta, -alpha, -colour, deadline, ctx, ply+1, nodes, tt)
+		score = -score
+
+		UnmakeMove(pos, undo)
+
+		if !ok {
+			return 0, false
+		}
+
+		if score >= beta {
+			tt.Store(key, 0, score, TTLowerBound, move)
+			return score, true
+		}
+
+		if score > alpha {
+			alpha = score
+			bestMove = move
+		}
+	}
+
+	flag := TTExact
+	if alpha <= originalAlpha {
+		flag = TTUpperBound
+	}
+
+	tt.Store(key, 0, alpha, flag, bestMove)
+
+	return alpha, true
+}
+
+func isTacticalMove(pos *Position, move Move) bool {
+	if move.isEnPassant || move.Promotion != 0 {
+		return true
+	}
+	return pos.Board[move.To] != Empty
+}
+
+func filterTacticalMoves(pos *Position, moves []Move) []Move {
+	tacticalMoves := moves[:0]
+	for _, move := range moves {
+		if isTacticalMove(pos, move) {
+			tacticalMoves = append(tacticalMoves, move)
+		}
+	}
+	return tacticalMoves
+}
+
+func getLegalTacticalMovesInto(pos *Position, colour int8, pseudoMoves []Move, legalMoves []Move) []Move {
+	originalSideToMove := pos.SideToMove
+	defer func() {
+		pos.SideToMove = originalSideToMove
+	}()
+
+	pos.SideToMove = colour
+	pseudoMoves = GeneratePseudoLegalMovesInto(pos, pseudoMoves)
+	pseudoMoves = filterTacticalMoves(pos, pseudoMoves)
+	return filterLegalMovesInto(pos, pseudoMoves, legalMoves)
 }
 
 func storeKiller(killers *[maxSearchPly][2]Move, ply int, move Move) {
