@@ -22,12 +22,14 @@ jobs:
 
       - name: Create or update GitHub release
         run: |
+          COMMIT_MSG="$(git log -1 --pretty=%B)"
+
           gh release create latest \
-            --title "Latest Build" \
-            --notes "Automated release from commit $GITHUB_SHA" \
+            --title "$COMMIT_MSG" \
+            --notes "$COMMIT_MSG" \
             || gh release edit latest \
-            --title "Latest Build" \
-            --notes "Automated release from commit $GITHUB_SHA"
+            --title "$COMMIT_MSG" \
+            --notes "$COMMIT_MSG"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -41,3 +43,5 @@ jobs:
           goarch: ${{ matrix.goarch }}
           release_tag: latest
           overwrite: true
+          compress_assets: false
+          md5sum: false
