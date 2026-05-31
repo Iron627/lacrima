@@ -43,5 +43,5 @@ jobs:
           goarch: ${{ matrix.goarch }}
           release_tag: latest
           overwrite: true
-          compress_assets: false
-          md5sum: false
+          compress_assets: FALSE
+          md5sum: FALSE
