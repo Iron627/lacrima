@@ -7,7 +7,10 @@ DONE:
   - movegen, board rep, legality filtering
   - PESTO eval, negamax with a/b pruning
   - move ordering based on mvv/lva
-  - beats ethantron in low tc, loses in high TC
   - 1 ply check extensions
   - transposition tables with iterative deepening
   - killer moves 
+  - Ordered quiescence search
+
+GOAL: 2000 ELO
+current estimate vs stash v11: 1678 ELO

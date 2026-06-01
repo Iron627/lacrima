@@ -2,8 +2,8 @@ name: Auto Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -20,19 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create or update GitHub release
-        run: |
-          COMMIT_MSG="$(git log -1 --pretty=%B)"
-
-          gh release create latest \
-            --title "$COMMIT_MSG" \
-            --notes "$COMMIT_MSG" \
-            || gh release edit latest \
-            --title "$COMMIT_MSG" \
-            --notes "$COMMIT_MSG"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build and upload binaries
         uses: wangyoucao577/go-release-action@v1.55
         with:
@@ -41,7 +28,7 @@ jobs:
           binary_name: lacrima
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          release_tag: latest
+          release_tag: ${{ github.ref_name }}
           overwrite: true
           compress_assets: FALSE
           md5sum: FALSE
