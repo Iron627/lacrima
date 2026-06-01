@@ -13,4 +13,5 @@ DONE:
   - Ordered quiescence search
 
 GOAL: 2000 ELO
+
 current estimate vs stash v11: 1678 ELO
