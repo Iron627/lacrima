@@ -335,7 +335,9 @@ func quiesce(pos *Position, alpha int, beta int, colour int8, deadline stdtime.T
 	kingSquare := FindKing(pos, colour)
 	inCheck := InCheck(pos, colour, kingSquare)
 
+	var ttMove Move
 	if entry, ok := tt.Probe(key); ok {
+		ttMove = entry.Move
 		switch entry.Flag {
 		case TTExact:
 			return entry.Score, true
@@ -378,6 +380,7 @@ func quiesce(pos *Position, alpha int, beta int, colour int8, deadline stdtime.T
 	} else {
 		moves = getLegalTacticalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
 	}
+	moves = QOrderMoves(pos, moves, ttMove)
 
 	bestMove := Move{}
 
