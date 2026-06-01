@@ -24,7 +24,8 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 
 	pos, _ := PositionFromFEN(startFEN)
 	history := RepetitionHistory{positionKey(&pos): 1}
-	tt := NewTranspositionTable(defaultTranspositionTableEntries)
+	hashMB := defaultHashMB
+	tt := NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
 
 	var searchID atomic.Uint64
 	var searchCancel context.CancelFunc
@@ -61,10 +62,29 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 		case "uci":
 			writeLine("id name Lacrima")
 			writeLine("id author Iron")
+			writeLine("option name Hash type spin default", defaultHashMB, "min", minHashMB, "max", maxHashMB)
+			writeLine("option name Clear Hash type button")
 			writeLine("uciok")
 
 		case "isready":
 			writeLine("readyok")
+
+		case "setoption":
+			switch {
+			case isClearHashOption(fields):
+				stopSearch(true)
+				tt.Clear()
+			case func() bool {
+				nextHashMB, ok := parseHashOption(fields)
+				if !ok {
+					return false
+				}
+				stopSearch(true)
+				hashMB = nextHashMB
+				tt = NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
+				return true
+			}():
+			}
 
 		case "ucinewgame":
 			stopSearch(true)
@@ -224,6 +244,62 @@ func parseGo(fields []string, stm int8) (int, int) {
 	}
 
 	return depth, moveTime
+}
+
+func parseHashOption(fields []string) (int, bool) {
+	name, value, ok := parseSetOption(fields)
+	if !ok || !strings.EqualFold(name, "Hash") || value == "" {
+		return 0, false
+	}
+
+	hashMB, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false
+	}
+	if hashMB < minHashMB {
+		hashMB = minHashMB
+	}
+	if hashMB > maxHashMB {
+		hashMB = maxHashMB
+	}
+
+	return hashMB, true
+}
+
+func isClearHashOption(fields []string) bool {
+	name, _, ok := parseSetOption(fields)
+	return ok && strings.EqualFold(name, "Clear Hash")
+}
+
+func parseSetOption(fields []string) (string, string, bool) {
+	if len(fields) < 5 || fields[0] != "setoption" {
+		return "", "", false
+	}
+
+	nameStart := -1
+	valueIndex := -1
+	for i := 1; i < len(fields); i++ {
+		switch fields[i] {
+		case "name":
+			nameStart = i + 1
+		case "value":
+			valueIndex = i
+		}
+	}
+	if nameStart == -1 {
+		return "", "", false
+	}
+
+	if valueIndex == -1 {
+		return strings.Join(fields[nameStart:], " "), "", true
+	}
+	if nameStart >= valueIndex {
+		return "", "", false
+	}
+	if valueIndex+1 >= len(fields) {
+		return strings.Join(fields[nameStart:valueIndex], " "), "", true
+	}
+	return strings.Join(fields[nameStart:valueIndex], " "), fields[valueIndex+1], true
 }
 
 func parsePositionWithHistory(fields []string) (Position, RepetitionHistory, bool) {

@@ -1,5 +1,13 @@
 package lacrima
 
+import "unsafe"
+
+const (
+	defaultHashMB = 16
+	minHashMB     = 1
+	maxHashMB     = 33554432
+)
+
 type TTFlag uint8
 
 const (
@@ -69,4 +77,13 @@ func (tt *TranspositionTable) Store(key uint64, depth int, score int, flag TTFla
 
 func (tt *TranspositionTable) index(key uint64) uint64 {
 	return key % uint64(len(tt.entries))
+}
+
+func transpositionTableEntriesForMB(hashMB int) uint64 {
+	bytes := uint64(hashMB) * 1024 * 1024
+	entrySize := uint64(unsafe.Sizeof(TTEntry{}))
+	if bytes < entrySize {
+		return 1
+	}
+	return bytes / entrySize
 }

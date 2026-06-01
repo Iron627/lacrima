@@ -8,7 +8,6 @@ import (
 const mateScore = 100000
 const repetitionAvoidanceScore = -1
 const repetitionDrawScore = 0
-const defaultTranspositionTableEntries = 1 << 18
 const nullMoveReduction = 2
 const maxSearchPly = 128
 
