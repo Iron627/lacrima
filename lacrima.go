@@ -226,11 +226,6 @@ func parseGo(fields []string, stm int8) (int, int) {
 	return depth, moveTime
 }
 
-func parsePosition(fields []string) (Position, bool) {
-	pos, _, ok := parsePositionWithHistory(fields)
-	return pos, ok
-}
-
 func parsePositionWithHistory(fields []string) (Position, RepetitionHistory, bool) {
 	if len(fields) < 2 {
 		return Position{}, nil, false
@@ -355,14 +350,6 @@ func squareToString(square int) string {
 	rank := square >> 4
 
 	return string(rune('a'+file)) + string(rune('1'+rank))
-}
-
-func parseSquare(s string) int {
-	square, ok := squareFromString(s)
-	if !ok {
-		return -1
-	}
-	return square
 }
 
 func squareFromString(s string) (int, bool) {

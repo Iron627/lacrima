@@ -213,10 +213,6 @@ func GeneratePseudoLegalMovesInto(pos *Position, moves []Move) []Move {
 	return moves
 }
 
-func GeneratePseudoLegalMoves(pos *Position) []Move {
-	return GeneratePseudoLegalMovesInto(pos, make([]Move, 0, pseudoMoveCapacity))
-}
-
 func filterLegalMovesInto(pos *Position, moves []Move, legalMoves []Move) []Move {
 	legalMoves = legalMoves[:0]
 	if cap(legalMoves) < len(moves) {
@@ -262,10 +258,6 @@ func filterLegalMovesInto(pos *Position, moves []Move, legalMoves []Move) []Move
 	}
 
 	return legalMoves
-}
-
-func filterLegalMoves(pos *Position, moves []Move) []Move {
-	return filterLegalMovesInto(pos, moves, make([]Move, 0, len(moves)))
 }
 
 func GetLegalMoves(pos *Position, colour int8) []Move {

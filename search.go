@@ -13,13 +13,11 @@ const nullMoveReduction = 2
 const maxSearchPly = 128
 
 type SearchInfo struct {
-	Depth            int
-	Score            int
-	Nodes            uint64
-	TimeMillis       int64
-	BestMove         Move
-	CurrentMove      Move
-	CurrentMoveIndex int
+	Depth      int
+	Score      int
+	Nodes      uint64
+	TimeMillis int64
+	BestMove   Move
 }
 
 type SearchInfoFunc func(SearchInfo)
@@ -179,14 +177,6 @@ func hasNonPawnMaterial(pos *Position, colour int8) bool {
 	}
 
 	return false
-}
-
-func GetBestMove(pos *Position, depth int, time int) Move {
-	return getBestMove(context.Background(), pos, depth, time)
-}
-
-func getBestMove(ctx context.Context, pos *Position, depth int, time int) Move {
-	return searchBestMove(ctx, pos, depth, time, nil, nil, NewTranspositionTable(defaultTranspositionTableEntries))
 }
 
 func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable) Move {

@@ -36,12 +36,13 @@ var benchFENs = []struct {
 	},
 }
 
-func BenchmarkGeneratePseudoLegalMoves(b *testing.B) {
+func BenchmarkGeneratePseudoLegalMovesInto(b *testing.B) {
 	for _, tc := range benchFENs {
 		pos := mustBenchPosition(b, tc.fen)
 		b.Run(tc.name, func(b *testing.B) {
+			moves := make([]Move, 0, pseudoMoveCapacity)
 			for b.Loop() {
-				benchMovesSink = GeneratePseudoLegalMoves(&pos)
+				benchMovesSink = GeneratePseudoLegalMovesInto(&pos, moves)
 			}
 		})
 	}
