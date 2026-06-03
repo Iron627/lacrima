@@ -168,7 +168,8 @@ func BenchmarkSearch(b *testing.B) {
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
 				pos := mustBenchPosition(b, tc.fen)
-				benchMoveSink = searchBestMove(context.Background(), &pos, tc.depth, 0, nil, nil, NewTranspositionTable(transpositionTableEntriesForMB(defaultHashMB)))
+				var historyTable [2][128][128]int
+				benchMoveSink = searchBestMove(context.Background(), &pos, tc.depth, 0, nil, nil, NewTranspositionTable(transpositionTableEntriesForMB(defaultHashMB)), &historyTable)
 			}
 		})
 	}

@@ -26,6 +26,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	history := RepetitionHistory{positionKey(&pos): 1}
 	hashMB := defaultHashMB
 	tt := NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
+	var historyTable [2][128][128]int
 
 	var searchID atomic.Uint64
 	var searchCancel context.CancelFunc
@@ -91,6 +92,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			pos, _ = PositionFromFEN(startFEN)
 			history = RepetitionHistory{positionKey(&pos): 1}
 			tt.Clear()
+			historyTable = [2][128][128]int{}
 
 		case "quit":
 			stopSearch(true)
@@ -135,7 +137,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 						"time", info.TimeMillis,
 						"pv", MoveToUCI(info.BestMove),
 					)
-				}, tt)
+				}, tt, &historyTable)
 
 				if searchID.Load() != id {
 					return

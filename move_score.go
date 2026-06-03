@@ -5,6 +5,8 @@ import "sort"
 const checkMoveBonus = 1000
 const preferredMoveBonus = 1000000
 const killerMoveBonus = 900000
+const maxHistoryValue = 8192
+const historyScoreDivisor = 96
 
 func ScoreMove(pos *Position, move Move) int {
 	score := 0
@@ -32,16 +34,24 @@ func ScoreMove(pos *Position, move Move) int {
 	return score
 }
 
-func orderMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move) []Move {
+func orderMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int) []Move {
 	scoredMoves := make([]ScoredMove, len(moves))
+	side := 0
+	if pos.SideToMove < 0 {
+		side = 1
+	}
+
 	for i, move := range moves {
 		score := ScoreMove(pos, move)
+		quiet := isQuietMove(pos, move)
 		if move == preferredMove {
 			score += preferredMoveBonus
 		} else if move == killerA || move == killerB {
 			score += killerMoveBonus
 		}
-
+		if quiet {
+			score += historyTable[side][move.From][move.To] / historyScoreDivisor
+		}
 		scoredMoves[i] = ScoredMove{
 			Move:  move,
 			Score: score,
