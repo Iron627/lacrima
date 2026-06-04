@@ -10,6 +10,7 @@ const repetitionAvoidanceScore = -1
 const repetitionDrawScore = 0
 const nullMoveReduction = 2
 const maxSearchPly = 128
+const aspirationWindow = 50
 
 type SearchInfo struct {
 	Depth      int
@@ -214,6 +215,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	}
 
 	bestMove := moves[0]
+	previousScore := 0
 	var totalNodes uint64
 
 	if searchStopped(ctx, stdtime.Time{}) {
@@ -225,14 +227,49 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	}
 
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
-		move, score, nodes, ok := searchDepth(ctx, pos, currentDepth, deadline, colour, history, tt, historyTable)
-		totalNodes += nodes
+		alpha := -mateScore
+		beta := mateScore
+		if currentDepth > 1 {
+			alpha = previousScore - aspirationWindow
+			if alpha < -mateScore {
+				alpha = -mateScore
+			}
 
-		if !ok {
+			beta = previousScore + aspirationWindow
+			if beta > mateScore {
+				beta = mateScore
+			}
+		}
+
+		var move Move
+		var score int
+		for {
+			moveNodes := uint64(0)
+			ok := false
+			move, score, moveNodes, ok = searchDepth(ctx, pos, currentDepth, deadline, colour, history, tt, historyTable, alpha, beta)
+			totalNodes += moveNodes
+
+			if !ok {
+				return bestMove
+			}
+
+			if score <= alpha && alpha > -mateScore {
+				alpha = -mateScore
+				beta = mateScore
+				continue
+			}
+
+			if score >= beta && beta < mateScore {
+				alpha = -mateScore
+				beta = mateScore
+				continue
+			}
+
 			break
 		}
 
 		bestMove = move
+		previousScore = score
 
 		if onInfo != nil {
 			onInfo(SearchInfo{
@@ -252,7 +289,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	return bestMove
 }
 
-func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory, tt *TranspositionTable, historyTable *[2][128][128]int) (Move, int, uint64, bool) {
+func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime.Time, colour int8, history RepetitionHistory, tt *TranspositionTable, historyTable *[2][128][128]int, alpha int, beta int) (Move, int, uint64, bool) {
 	var killers [maxSearchPly][2]Move
 	var pseudoBuf [256]Move
 	var legalBuf [256]Move
@@ -271,8 +308,7 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 	bestMove := moves[0]
 	bestScore := -mateScore
 	var nodes uint64
-	alpha := -mateScore
-	beta := mateScore
+	originalAlpha := alpha
 
 	for _, move := range moves {
 		if searchStopped(ctx, deadline) {
@@ -310,11 +346,15 @@ func searchDepth(ctx context.Context, pos *Position, depth int, deadline stdtime
 
 		if alpha >= beta {
 			tt.Store(rootKey, depth, score, TTLowerBound, move)
-			break
+			return bestMove, bestScore, nodes, true
 		}
 	}
 
-	tt.Store(rootKey, depth, bestScore, TTExact, bestMove)
+	flag := TTExact
+	if bestScore <= originalAlpha {
+		flag = TTUpperBound
+	}
+	tt.Store(rootKey, depth, bestScore, flag, bestMove)
 
 	return bestMove, bestScore, nodes, true
 }
