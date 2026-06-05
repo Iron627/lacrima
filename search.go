@@ -123,13 +123,13 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 	var pseudoBuf [256]Move
 	var legalBuf [256]Move
+	var scoreBuf [256]int
 	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
 	var killerA, killerB Move
 	if ply >= 0 && ply < maxSearchPly {
 		killerA = search.killers[ply][0]
 		killerB = search.killers[ply][1]
 	}
-	moves = orderMoves(pos, moves, ttMove, killerA, killerB, search.historyTable)
 
 	if len(moves) == 0 {
 		if inCheck {
@@ -138,10 +138,14 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		return 0, true
 	}
 
+	scores := scoreBuf[:len(moves)]
+	scoreMoves(pos, moves, ttMove, killerA, killerB, search.historyTable, scores)
+
 	bestMove := moves[0]
 	bestScore := -mateScore
 
-	for _, move := range moves {
+	for moveIndex := range moves {
+		move := pickBestMove(moves, scores, moveIndex)
 		undo := MakeMove(pos, move)
 
 		repetitionKey, count := pushRepetition(search.history, pos)
@@ -317,6 +321,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 func searchDepth(pos *Position, depth int, colour int8, search *searchContext, alpha int, beta int) (Move, int, uint64, bool) {
 	var pseudoBuf [256]Move
 	var legalBuf [256]Move
+	var scoreBuf [256]int
 	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
 	if len(moves) == 0 {
 		return Move{}, 0, 0, true
@@ -328,16 +333,18 @@ func searchDepth(pos *Position, depth int, colour int8, search *searchContext, a
 		ttMove = entry.Move
 	}
 
-	moves = orderMoves(pos, moves, ttMove, Move{}, Move{}, search.historyTable)
+	scores := scoreBuf[:len(moves)]
+	scoreMoves(pos, moves, ttMove, Move{}, Move{}, search.historyTable, scores)
 	bestMove := moves[0]
 	bestScore := -mateScore
 	originalAlpha := alpha
 
-	for _, move := range moves {
+	for moveIndex := range moves {
 		if searchContextStopped(search) {
 			return bestMove, bestScore, search.nodes, false
 		}
 
+		move := pickBestMove(moves, scores, moveIndex)
 		undo := MakeMove(pos, move)
 
 		var score int
@@ -435,6 +442,7 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour i
 
 	var pseudoMoveBuffer [256]Move
 	var legalMoveBuffer [256]Move
+	var scoreBuffer [256]int
 	var moves []Move
 	if inCheck {
 		moves = getLegalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
@@ -446,11 +454,13 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour i
 	} else {
 		moves = getLegalTacticalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
 	}
-	moves = QOrderMoves(pos, moves, ttMove)
+	scores := scoreBuffer[:len(moves)]
+	qScoreMoves(pos, moves, ttMove, scores)
 
 	bestMove := Move{}
 
-	for _, move := range moves {
+	for moveIndex := range moves {
+		move := pickBestMove(moves, scores, moveIndex)
 		undo := MakeMove(pos, move)
 
 		score, ok := quiesce(search, pos, -beta, -alpha, -colour, ply+1)

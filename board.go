@@ -10,11 +10,6 @@ type Move struct {
 	isDoublePawnPush bool
 }
 
-type ScoredMove struct {
-	Move  Move
-	Score int
-}
-
 type Position struct {
 	Board           Board
 	SideToMove      int8

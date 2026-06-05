@@ -1,7 +1,5 @@
 package lacrima
 
-import "sort"
-
 const checkMoveBonus = 1000
 const preferredMoveBonus = 1000000
 const killerMoveBonus = 900000
@@ -34,8 +32,7 @@ func ScoreMove(pos *Position, move Move) int {
 	return score
 }
 
-func orderMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int) []Move {
-	scoredMoves := make([]ScoredMove, len(moves))
+func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int, scores []int) {
 	side := 0
 	if pos.SideToMove < 0 {
 		side = 1
@@ -52,22 +49,8 @@ func orderMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, k
 		if quiet {
 			score += historyTable[side][move.From][move.To] / historyScoreDivisor
 		}
-		scoredMoves[i] = ScoredMove{
-			Move:  move,
-			Score: score,
-		}
+		scores[i] = score
 	}
-
-	sort.SliceStable(scoredMoves, func(i, j int) bool {
-		return scoredMoves[i].Score > scoredMoves[j].Score
-	})
-
-	ordered := make([]Move, len(scoredMoves))
-	for i, scoredMove := range scoredMoves {
-		ordered[i] = scoredMove.Move
-	}
-
-	return ordered
 }
 
 func qScoreMove(pos *Position, move Move) int {
@@ -90,28 +73,26 @@ func qScoreMove(pos *Position, move Move) int {
 	return score
 }
 
-func QOrderMoves(pos *Position, moves []Move, preferredMove Move) []Move {
-	scoredMoves := make([]ScoredMove, len(moves))
+func qScoreMoves(pos *Position, moves []Move, preferredMove Move, scores []int) {
 	for i, move := range moves {
 		score := qScoreMove(pos, move)
 		if move == preferredMove {
 			score += preferredMoveBonus
 		}
 
-		scoredMoves[i] = ScoredMove{
-			Move:  move,
-			Score: score,
+		scores[i] = score
+	}
+}
+
+func pickBestMove(moves []Move, scores []int, start int) Move {
+	best := start
+	for i := start + 1; i < len(moves); i++ {
+		if scores[i] > scores[best] {
+			best = i
 		}
 	}
 
-	sort.SliceStable(scoredMoves, func(i, j int) bool {
-		return scoredMoves[i].Score > scoredMoves[j].Score
-	})
-
-	ordered := make([]Move, len(scoredMoves))
-	for i, scoredMove := range scoredMoves {
-		ordered[i] = scoredMove.Move
-	}
-
-	return ordered
+	moves[start], moves[best] = moves[best], moves[start]
+	scores[start], scores[best] = scores[best], scores[start]
+	return moves[start]
 }
