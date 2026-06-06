@@ -56,23 +56,26 @@ func searchContextStopped(search *searchContext) bool {
 	return searchStopped(search.ctx, search.deadline)
 }
 
-func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, colour int8, ply int, allowNull bool, isCheckExtended bool) (int, bool) {
+func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, colour int8, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move) (int, bool) {
+	isRoot := rootBestMove != nil
 
 	if searchContextStopped(search) {
 		return 0, false
 	}
 
-	if search.history != nil && search.history[positionKey(pos)] >= 3 {
+	if !isRoot && search.history != nil && search.history[positionKey(pos)] >= 3 {
 		return repetitionDrawScore, true
 	}
 
-	search.nodes++
+	if !isRoot {
+		search.nodes++
+	}
 	kingSquare := FindKing(pos, colour)
 	inCheck := InCheck(pos, colour, kingSquare)
 
 	if depth <= 0 {
 		if !isCheckExtended && inCheck {
-			return negamax(search, pos, 1, alpha, beta, colour, ply, allowNull, true)
+			return negamax(search, pos, 1, alpha, beta, colour, ply, allowNull, true, rootBestMove)
 		}
 		if !inCheck {
 			return quiesce(search, pos, alpha, beta, colour, ply)
@@ -85,7 +88,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	var ttMove Move
 	if entry, ok := search.tt.Probe(key); ok {
 		ttMove = entry.Move
-		if entry.Depth >= depth {
+		if !isRoot && entry.Depth >= depth {
 			switch entry.Flag {
 			case TTExact:
 				return entry.Score, true
@@ -105,9 +108,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 	}
 
-	if allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) {
+	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) {
 		undo := MakeNullMove(pos)
-		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, ply+1, false, isCheckExtended)
+		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, ply+1, false, isCheckExtended, nil)
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -126,7 +129,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	var scoreBuf [256]int
 	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
 	var killerA, killerB Move
-	if ply >= 0 && ply < maxSearchPly {
+	if !isRoot && ply >= 0 && ply < maxSearchPly {
 		killerA = search.killers[ply][0]
 		killerB = search.killers[ply][1]
 	}
@@ -153,10 +156,14 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		var score int
 		var ok bool
 		if count >= 3 {
-			score = repetitionDrawScore
+			if isRoot {
+				score = repetitionAvoidanceScore
+			} else {
+				score = repetitionDrawScore
+			}
 			ok = true
 		} else {
-			score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, ply+1, true, isCheckExtended)
+			score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, ply+1, true, isCheckExtended, nil)
 			score = -score
 		}
 		popRepetition(search.history, repetitionKey)
@@ -170,9 +177,12 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		if score > bestScore {
 			bestScore = score
 			bestMove = move
+			if isRoot {
+				*rootBestMove = move
+			}
 		}
 		if score >= beta {
-			if isQuietMove(pos, move) {
+			if !isRoot && isQuietMove(pos, move) {
 				side := 0
 				if colour < 0 {
 					side = 1
@@ -272,11 +282,11 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		var move Move
 		var score int
 		for {
-			moveNodes := uint64(0)
-			ok := false
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
-			move, score, moveNodes, ok = searchDepth(pos, currentDepth, colour, search, alpha, beta)
-			totalNodes += moveNodes
+			move = bestMove
+			ok := false
+			score, ok = negamax(search, pos, currentDepth, alpha, beta, colour, 0, true, false, &move)
+			totalNodes += search.nodes
 
 			if !ok {
 				return bestMove
@@ -316,77 +326,6 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	}
 
 	return bestMove
-}
-
-func searchDepth(pos *Position, depth int, colour int8, search *searchContext, alpha int, beta int) (Move, int, uint64, bool) {
-	var pseudoBuf [256]Move
-	var legalBuf [256]Move
-	var scoreBuf [256]int
-	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
-	if len(moves) == 0 {
-		return Move{}, 0, 0, true
-	}
-
-	rootKey := positionKey(pos)
-	var ttMove Move
-	if entry, ok := search.tt.Probe(rootKey); ok {
-		ttMove = entry.Move
-	}
-
-	scores := scoreBuf[:len(moves)]
-	scoreMoves(pos, moves, ttMove, Move{}, Move{}, search.historyTable, scores)
-	bestMove := moves[0]
-	bestScore := -mateScore
-	originalAlpha := alpha
-
-	for moveIndex := range moves {
-		if searchContextStopped(search) {
-			return bestMove, bestScore, search.nodes, false
-		}
-
-		move := pickBestMove(moves, scores, moveIndex)
-		undo := MakeMove(pos, move)
-
-		var score int
-		var ok bool
-		repetitionKey, count := pushRepetition(search.history, pos)
-		if count >= 3 {
-			score = repetitionAvoidanceScore
-			ok = true
-		} else {
-			score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, 1, true, false)
-			score = -score
-		}
-		popRepetition(search.history, repetitionKey)
-
-		UnmakeMove(pos, undo)
-
-		if !ok {
-			return bestMove, bestScore, search.nodes, false
-		}
-
-		if score > bestScore {
-			bestScore = score
-			bestMove = move
-		}
-
-		if score > alpha {
-			alpha = score
-		}
-
-		if alpha >= beta {
-			search.tt.Store(rootKey, depth, score, TTLowerBound, move)
-			return bestMove, bestScore, search.nodes, true
-		}
-	}
-
-	flag := TTExact
-	if bestScore <= originalAlpha {
-		flag = TTUpperBound
-	}
-	search.tt.Store(rootKey, depth, bestScore, flag, bestMove)
-
-	return bestMove, bestScore, search.nodes, true
 }
 
 func isQuietMove(pos *Position, move Move) bool {
