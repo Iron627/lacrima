@@ -56,7 +56,7 @@ func searchContextStopped(search *searchContext) bool {
 	return searchStopped(search.ctx, search.deadline)
 }
 
-func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, colour int8, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move) (int, bool) {
+func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, colour int8, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move, pvNode bool) (int, bool) {
 	isRoot := rootBestMove != nil
 
 	if searchContextStopped(search) {
@@ -75,7 +75,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 	if depth <= 0 {
 		if !isCheckExtended && inCheck {
-			return negamax(search, pos, 1, alpha, beta, colour, ply, allowNull, true, rootBestMove)
+			return negamax(search, pos, 1, alpha, beta, colour, ply, allowNull, true, rootBestMove, pvNode)
 		}
 		if !inCheck {
 			return quiesce(search, pos, alpha, beta, colour, ply)
@@ -108,9 +108,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 	}
 
-	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) {
+	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) && !pvNode {
 		undo := MakeNullMove(pos)
-		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, ply+1, false, isCheckExtended, nil)
+		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, ply+1, false, isCheckExtended, nil, false)
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -163,8 +163,16 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			}
 			ok = true
 		} else {
-			score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, ply+1, true, isCheckExtended, nil)
-			score = -score
+			if !pvNode || moveIndex > 0 {
+
+				score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, -colour, ply+1, true, isCheckExtended, nil, false)
+				score = -score
+			}
+			if pvNode && (moveIndex == 0 || score > alpha) {
+				score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, ply+1, true, isCheckExtended, nil, true)
+				score = -score
+			}
+
 		}
 		popRepetition(search.history, repetitionKey)
 
@@ -285,7 +293,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
 			ok := false
-			score, ok = negamax(search, pos, currentDepth, alpha, beta, colour, 0, true, false, &move)
+			score, ok = negamax(search, pos, currentDepth, alpha, beta, colour, 0, true, false, &move, true)
 			totalNodes += search.nodes
 
 			if !ok {
