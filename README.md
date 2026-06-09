@@ -24,7 +24,9 @@ DONE:
   - repetition detection
   - mate score handling
   - move ordering with TT move, MVV/LVA-ish captures, promos, checks, killers, and history
+  - principal variation search
+  - late move reduction
 
 GOAL: 2000 ELO
 
-current estimate vs stash v11: 1700 elo
+current estimate vs stash v12: 1800 elo

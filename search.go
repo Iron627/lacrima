@@ -11,6 +11,7 @@ const repetitionDrawScore = 0
 const nullMoveReduction = 2
 const maxSearchPly = 128
 const aspirationWindow = 50
+const LMReduction = 2
 
 type SearchInfo struct {
 	Depth      int
@@ -149,6 +150,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 	for moveIndex := range moves {
 		move := pickBestMove(moves, scores, moveIndex)
+		tactical := isTacticalMove(pos, move)
 		undo := MakeMove(pos, move)
 
 		repetitionKey, count := pushRepetition(search.history, pos)
@@ -164,10 +166,20 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			ok = true
 		} else {
 			if !pvNode || moveIndex > 0 {
+				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
+					score, ok = negamax(search, pos, depth-1-LMReduction, -alpha-1, -alpha, -colour, ply+1, false, isCheckExtended, nil, false)
+					score = -score
 
-				score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, -colour, ply+1, true, isCheckExtended, nil, false)
-				score = -score
+					if ok && score > alpha {
+						score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, -colour, ply+1, true, isCheckExtended, nil, false)
+						score = -score
+					}
+				} else {
+					score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, -colour, ply+1, true, isCheckExtended, nil, false)
+					score = -score
+				}
 			}
+
 			if pvNode && (moveIndex == 0 || score > alpha) {
 				score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, ply+1, true, isCheckExtended, nil, true)
 				score = -score
