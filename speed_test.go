@@ -53,7 +53,7 @@ func BenchmarkGetLegalMoves(b *testing.B) {
 		pos := mustBenchPosition(b, tc.fen)
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
-				benchMovesSink = GetLegalMoves(&pos, pos.SideToMove)
+				benchMovesSink = GetLegalMoves(&pos)
 			}
 		})
 	}
@@ -62,7 +62,7 @@ func BenchmarkGetLegalMoves(b *testing.B) {
 func BenchmarkIsSquareAttacked(b *testing.B) {
 	for _, tc := range benchFENs {
 		pos := mustBenchPosition(b, tc.fen)
-		kingSquare := FindKing(&pos, pos.SideToMove)
+		kingSquare := FindKing(&pos)
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
 				benchBoolSink = IsSquareAttacked(&pos, kingSquare, -pos.SideToMove)
@@ -76,8 +76,8 @@ func BenchmarkInCheck(b *testing.B) {
 		pos := mustBenchPosition(b, tc.fen)
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
-				kingSquare := FindKing(&pos, pos.SideToMove)
-				benchBoolSink = InCheck(&pos, pos.SideToMove, kingSquare)
+				kingSquare := FindKing(&pos)
+				benchBoolSink = InCheck(&pos, kingSquare)
 			}
 		})
 	}
@@ -88,7 +88,7 @@ func BenchmarkEval(b *testing.B) {
 		pos := mustBenchPosition(b, tc.fen)
 		b.Run(tc.name, func(b *testing.B) {
 			for b.Loop() {
-				benchIntSink = Eval(&pos, pos.SideToMove)
+				benchIntSink = Eval(&pos)
 			}
 		})
 	}
@@ -97,7 +97,7 @@ func BenchmarkEval(b *testing.B) {
 func BenchmarkMakeUnmakeMove(b *testing.B) {
 	for _, tc := range benchFENs {
 		pos := mustBenchPosition(b, tc.fen)
-		moves := GetLegalMoves(&pos, pos.SideToMove)
+		moves := GetLegalMoves(&pos)
 		if len(moves) == 0 {
 			b.Fatalf("%s has no legal moves", tc.name)
 		}
@@ -116,7 +116,7 @@ func BenchmarkMakeUnmakeMove(b *testing.B) {
 func BenchmarkMoveFromUCI(b *testing.B) {
 	for _, tc := range benchFENs {
 		pos := mustBenchPosition(b, tc.fen)
-		moves := GetLegalMoves(&pos, pos.SideToMove)
+		moves := GetLegalMoves(&pos)
 		if len(moves) == 0 {
 			b.Fatalf("%s has no legal moves", tc.name)
 		}

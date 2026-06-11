@@ -1,6 +1,6 @@
 package lacrima
 
-func Eval(pos *Position, colour int8) int {
+func Eval(pos *Position) int {
 	mg := [2]int{}
 	eg := [2]int{}
 	gamePhase := 0
@@ -41,7 +41,7 @@ func Eval(pos *Position, colour int8) int {
 	score := (mgScore*gamePhase +
 		egScore*egPhase) / 24
 
-	if colour < 0 {
+	if pos.SideToMove < 0 {
 		score = -score
 	}
 

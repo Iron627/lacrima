@@ -61,7 +61,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 		switch fields[0] {
 
 		case "uci":
-			writeLine("id name Lacrima v1.0.9.5")
+			writeLine("id name Lacrima v1.0.9.6")
 			writeLine("id author Iron")
 			writeLine("option name Hash type spin default", defaultHashMB, "min", minHashMB, "max", maxHashMB)
 			writeLine("option name Clear Hash type button")
@@ -369,7 +369,7 @@ func Perft(pos *Position, depth int) uint64 {
 		return 1
 	}
 
-	moves := GetLegalMoves(pos, pos.SideToMove)
+	moves := GetLegalMoves(pos)
 
 	if depth == 1 {
 		return uint64(len(moves))
@@ -412,7 +412,7 @@ func MoveToUCI(move Move) string {
 }
 
 func MoveFromUCI(pos *Position, s string) (Move, bool) {
-	moves := GetLegalMoves(pos, pos.SideToMove)
+	moves := GetLegalMoves(pos)
 
 	for _, move := range moves {
 		if MoveToUCI(move) == s {

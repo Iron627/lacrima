@@ -24,8 +24,8 @@ func ScoreMove(pos *Position, move Move) int {
 		score += PieceValue(PieceType(move.Promotion))
 	}
 	undo := MakeMove(pos, move)
-	kingSquare := FindKing(pos, pos.SideToMove)
-	if InCheck(pos, pos.SideToMove, kingSquare) {
+	kingSquare := FindKing(pos)
+	if InCheck(pos, kingSquare) {
 		score += checkMoveBonus
 	}
 	UnmakeMove(pos, undo)

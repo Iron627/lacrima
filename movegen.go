@@ -218,59 +218,64 @@ func filterLegalMovesInto(pos *Position, moves []Move, legalMoves []Move) []Move
 	if cap(legalMoves) < len(moves) {
 		legalMoves = make([]Move, 0, len(moves))
 	}
-	kingSquare := FindKing(pos, pos.SideToMove)
+	kingSquare := FindKing(pos)
 
 	for _, move := range moves {
-		movingSide := pos.SideToMove
-		movingPiece := pos.Board[move.From]
-
-		if move.isCastling {
-			switch move.To {
-			case 6:
-				if IsSquareAttacked(pos, 4, -movingSide) || IsSquareAttacked(pos, 5, -movingSide) || IsSquareAttacked(pos, 6, -movingSide) {
-					continue
-				}
-			case 2:
-				if IsSquareAttacked(pos, 4, -movingSide) || IsSquareAttacked(pos, 3, -movingSide) || IsSquareAttacked(pos, 2, -movingSide) {
-					continue
-				}
-			case 118:
-				if IsSquareAttacked(pos, 116, -movingSide) || IsSquareAttacked(pos, 117, -movingSide) || IsSquareAttacked(pos, 118, -movingSide) {
-					continue
-				}
-			case 114:
-				if IsSquareAttacked(pos, 116, -movingSide) || IsSquareAttacked(pos, 115, -movingSide) || IsSquareAttacked(pos, 114, -movingSide) {
-					continue
-				}
-			}
+		undo, ok := makeMoveIfLegal(pos, move, kingSquare)
+		if !ok {
+			continue
 		}
 
-		undo := MakeMove(pos, move)
-		checkedKingSquare := kingSquare
-		if movingPiece == WhiteKing || movingPiece == BlackKing {
-			checkedKingSquare = move.To
-		}
-		if !InCheck(pos, movingSide, checkedKingSquare) {
-			legalMoves = append(legalMoves, move)
-		}
-
+		legalMoves = append(legalMoves, move)
 		UnmakeMove(pos, undo)
 	}
 
 	return legalMoves
 }
 
-func GetLegalMoves(pos *Position, colour int8) []Move {
-	return getLegalMovesInto(pos, colour, make([]Move, 0, pseudoMoveCapacity), nil)
+func makeMoveIfLegal(pos *Position, move Move, kingSquare int) (Undo, bool) {
+	movingSide := pos.SideToMove
+	movingPiece := pos.Board[move.From]
+
+	if move.isCastling {
+		switch move.To {
+		case 6:
+			if IsSquareAttacked(pos, 4, -movingSide) || IsSquareAttacked(pos, 5, -movingSide) || IsSquareAttacked(pos, 6, -movingSide) {
+				return Undo{}, false
+			}
+		case 2:
+			if IsSquareAttacked(pos, 4, -movingSide) || IsSquareAttacked(pos, 3, -movingSide) || IsSquareAttacked(pos, 2, -movingSide) {
+				return Undo{}, false
+			}
+		case 118:
+			if IsSquareAttacked(pos, 116, -movingSide) || IsSquareAttacked(pos, 117, -movingSide) || IsSquareAttacked(pos, 118, -movingSide) {
+				return Undo{}, false
+			}
+		case 114:
+			if IsSquareAttacked(pos, 116, -movingSide) || IsSquareAttacked(pos, 115, -movingSide) || IsSquareAttacked(pos, 114, -movingSide) {
+				return Undo{}, false
+			}
+		}
+	}
+
+	undo := MakeMove(pos, move)
+	checkedKingSquare := kingSquare
+	if movingPiece == WhiteKing || movingPiece == BlackKing {
+		checkedKingSquare = move.To
+	}
+	if checkedKingSquare != -1 && IsSquareAttacked(pos, checkedKingSquare, pos.SideToMove) {
+		UnmakeMove(pos, undo)
+		return Undo{}, false
+	}
+
+	return undo, true
 }
 
-func getLegalMovesInto(pos *Position, colour int8, pseudoMoves []Move, legalMoves []Move) []Move {
-	originalSideToMove := pos.SideToMove
-	defer func() {
-		pos.SideToMove = originalSideToMove
-	}()
+func GetLegalMoves(pos *Position) []Move {
+	return getLegalMovesInto(pos, make([]Move, 0, pseudoMoveCapacity), nil)
+}
 
-	pos.SideToMove = colour
+func getLegalMovesInto(pos *Position, pseudoMoves []Move, legalMoves []Move) []Move {
 	pseudoLegalMoves := GeneratePseudoLegalMovesInto(pos, pseudoMoves)
 	return filterLegalMovesInto(pos, pseudoLegalMoves, legalMoves)
 }

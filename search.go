@@ -57,8 +57,9 @@ func searchContextStopped(search *searchContext) bool {
 	return searchStopped(search.ctx, search.deadline)
 }
 
-func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, colour int8, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move, pvNode bool) (int, bool) {
+func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move, pvNode bool) (int, bool) {
 	isRoot := rootBestMove != nil
+	sideToMove := pos.SideToMove
 
 	if searchContextStopped(search) {
 		return 0, false
@@ -71,17 +72,17 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	if !isRoot {
 		search.nodes++
 	}
-	kingSquare := FindKing(pos, colour)
-	inCheck := InCheck(pos, colour, kingSquare)
+	kingSquare := FindKing(pos)
+	inCheck := InCheck(pos, kingSquare)
 
 	if depth <= 0 {
 		if !isCheckExtended && inCheck {
-			return negamax(search, pos, 1, alpha, beta, colour, ply, allowNull, true, rootBestMove, pvNode)
+			return negamax(search, pos, 1, alpha, beta, ply, allowNull, true, rootBestMove, pvNode)
 		}
 		if !inCheck {
-			return quiesce(search, pos, alpha, beta, colour, ply)
+			return quiesce(search, pos, alpha, beta, ply)
 		}
-		return Eval(pos, colour), true
+		return Eval(pos), true
 	}
 
 	key := positionKey(pos)
@@ -109,9 +110,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 	}
 
-	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos, colour) && !pvNode {
+	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos) && !pvNode {
 		undo := MakeNullMove(pos)
-		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, -colour, ply+1, false, isCheckExtended, nil, false)
+		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, ply+1, false, isCheckExtended, nil, false)
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -126,9 +127,8 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	}
 
 	var pseudoBuf [256]Move
-	var legalBuf [256]Move
 	var scoreBuf [256]int
-	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
+	moves := GeneratePseudoLegalMovesInto(pos, pseudoBuf[:0])
 	var killerA, killerB Move
 	if !isRoot && ply >= 0 && ply < maxSearchPly {
 		killerA = search.killers[ply][0]
@@ -145,13 +145,20 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	scores := scoreBuf[:len(moves)]
 	scoreMoves(pos, moves, ttMove, killerA, killerB, search.historyTable, scores)
 
-	bestMove := moves[0]
+	bestMove := Move{}
 	bestScore := -mateScore
+	searchedMoves := 0
 
-	for moveIndex := range moves {
-		move := pickBestMove(moves, scores, moveIndex)
+	for pseudoMoveIndex := range moves {
+		move := pickBestMove(moves, scores, pseudoMoveIndex)
 		tactical := isTacticalMove(pos, move)
-		undo := MakeMove(pos, move)
+		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
+		if !legal {
+			continue
+		}
+
+		moveIndex := searchedMoves
+		searchedMoves++
 
 		repetitionKey, count := pushRepetition(search.history, pos)
 
@@ -167,21 +174,21 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		} else {
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
-					score, ok = negamax(search, pos, depth-1-LMReduction, -alpha-1, -alpha, -colour, ply+1, false, isCheckExtended, nil, false)
+					score, ok = negamax(search, pos, depth-1-LMReduction, -alpha-1, -alpha, ply+1, false, isCheckExtended, nil, false)
 					score = -score
 
 					if ok && score > alpha {
-						score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, -colour, ply+1, true, isCheckExtended, nil, false)
+						score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, ply+1, true, isCheckExtended, nil, false)
 						score = -score
 					}
 				} else {
-					score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, -colour, ply+1, true, isCheckExtended, nil, false)
+					score, ok = negamax(search, pos, depth-1, -alpha-1, -alpha, ply+1, true, isCheckExtended, nil, false)
 					score = -score
 				}
 			}
 
 			if pvNode && (moveIndex == 0 || score > alpha) {
-				score, ok = negamax(search, pos, depth-1, -beta, -alpha, -colour, ply+1, true, isCheckExtended, nil, true)
+				score, ok = negamax(search, pos, depth-1, -beta, -alpha, ply+1, true, isCheckExtended, nil, true)
 				score = -score
 			}
 
@@ -204,7 +211,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		if score >= beta {
 			if !isRoot && isQuietMove(pos, move) {
 				side := 0
-				if colour < 0 {
+				if sideToMove < 0 {
 					side = 1
 				}
 
@@ -227,6 +234,13 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 	}
 
+	if searchedMoves == 0 {
+		if inCheck {
+			return -mateScore + ply, true
+		}
+		return 0, true
+	}
+
 	flag := TTExact
 	if bestScore <= originalAlpha {
 		flag = TTUpperBound
@@ -236,9 +250,11 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	return bestScore, true
 }
 
-func hasNonPawnMaterial(pos *Position, colour int8) bool {
+func hasNonPawnMaterial(pos *Position) bool {
+	sideToMove := pos.SideToMove
+
 	for square, piece := range pos.Board {
-		if IsOffBoard(square) || piece == Empty || (piece > 0) != (colour > 0) {
+		if IsOffBoard(square) || piece == Empty || (piece > 0) != (sideToMove > 0) {
 			continue
 		}
 
@@ -252,7 +268,6 @@ func hasNonPawnMaterial(pos *Position, colour int8) bool {
 }
 
 func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int) Move {
-	colour := pos.SideToMove
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
 
@@ -266,13 +281,12 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	}
 
 	var pseudoBuf [256]Move
-	var legalBuf [256]Move
-	moves := getLegalMovesInto(pos, colour, pseudoBuf[:0], legalBuf[:0])
-	if len(moves) == 0 {
+	moves := GeneratePseudoLegalMovesInto(pos, pseudoBuf[:0])
+	bestMove, ok := firstLegalMove(pos, moves)
+	if !ok {
 		return Move{}
 	}
 
-	bestMove := moves[0]
 	previousScore := 0
 	var totalNodes uint64
 
@@ -305,7 +319,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
 			ok := false
-			score, ok = negamax(search, pos, currentDepth, alpha, beta, colour, 0, true, false, &move, true)
+			score, ok = negamax(search, pos, currentDepth, alpha, beta, 0, true, false, &move, true)
 			totalNodes += search.nodes
 
 			if !ok {
@@ -348,6 +362,22 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	return bestMove
 }
 
+func firstLegalMove(pos *Position, moves []Move) (Move, bool) {
+	kingSquare := FindKing(pos)
+
+	for _, move := range moves {
+		undo, ok := makeMoveIfLegal(pos, move, kingSquare)
+		if !ok {
+			continue
+		}
+
+		UnmakeMove(pos, undo)
+		return move, true
+	}
+
+	return Move{}, false
+}
+
 func isQuietMove(pos *Position, move Move) bool {
 	if move.isEnPassant || move.Promotion != 0 || move.isCastling {
 		return false
@@ -355,7 +385,7 @@ func isQuietMove(pos *Position, move Move) bool {
 	return pos.Board[move.To] == Empty
 }
 
-func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour int8, ply int) (int, bool) {
+func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int) (int, bool) {
 	if searchContextStopped(search) {
 		return 0, false
 	}
@@ -364,8 +394,8 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour i
 
 	key := positionKey(pos)
 	originalAlpha := alpha
-	kingSquare := FindKing(pos, colour)
-	inCheck := InCheck(pos, colour, kingSquare)
+	kingSquare := FindKing(pos)
+	inCheck := InCheck(pos, kingSquare)
 
 	var ttMove Move
 	if entry, ok := search.tt.Probe(key); ok {
@@ -388,7 +418,7 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour i
 	}
 
 	if !inCheck {
-		score := Eval(pos, colour)
+		score := Eval(pos)
 
 		if score >= beta {
 			search.tt.Store(key, 0, score, TTLowerBound, Move{})
@@ -400,29 +430,28 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour i
 	}
 
 	var pseudoMoveBuffer [256]Move
-	var legalMoveBuffer [256]Move
 	var scoreBuffer [256]int
 	var moves []Move
 	if inCheck {
-		moves = getLegalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
-		if len(moves) == 0 {
-			score := -mateScore + ply
-			search.tt.Store(key, 0, score, TTExact, Move{})
-			return score, true
-		}
+		moves = GeneratePseudoLegalMovesInto(pos, pseudoMoveBuffer[:0])
 	} else {
-		moves = getLegalTacticalMovesInto(pos, colour, pseudoMoveBuffer[:0], legalMoveBuffer[:0])
+		moves = getPseudoTacticalMovesInto(pos, pseudoMoveBuffer[:0])
 	}
 	scores := scoreBuffer[:len(moves)]
 	qScoreMoves(pos, moves, ttMove, scores)
 
 	bestMove := Move{}
+	searchedMoves := 0
 
-	for moveIndex := range moves {
-		move := pickBestMove(moves, scores, moveIndex)
-		undo := MakeMove(pos, move)
+	for pseudoMoveIndex := range moves {
+		move := pickBestMove(moves, scores, pseudoMoveIndex)
+		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
+		if !legal {
+			continue
+		}
+		searchedMoves++
 
-		score, ok := quiesce(search, pos, -beta, -alpha, -colour, ply+1)
+		score, ok := quiesce(search, pos, -beta, -alpha, ply+1)
 		score = -score
 
 		UnmakeMove(pos, undo)
@@ -440,6 +469,12 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, colour i
 			alpha = score
 			bestMove = move
 		}
+	}
+
+	if inCheck && searchedMoves == 0 {
+		score := -mateScore + ply
+		search.tt.Store(key, 0, score, TTExact, Move{})
+		return score, true
 	}
 
 	flag := TTExact
@@ -469,16 +504,9 @@ func filterTacticalMoves(pos *Position, moves []Move) []Move {
 	return tacticalMoves
 }
 
-func getLegalTacticalMovesInto(pos *Position, colour int8, pseudoMoves []Move, legalMoves []Move) []Move {
-	originalSideToMove := pos.SideToMove
-	defer func() {
-		pos.SideToMove = originalSideToMove
-	}()
-
-	pos.SideToMove = colour
+func getPseudoTacticalMovesInto(pos *Position, pseudoMoves []Move) []Move {
 	pseudoMoves = GeneratePseudoLegalMovesInto(pos, pseudoMoves)
-	pseudoMoves = filterTacticalMoves(pos, pseudoMoves)
-	return filterLegalMovesInto(pos, pseudoMoves, legalMoves)
+	return filterTacticalMoves(pos, pseudoMoves)
 }
 
 func storeKiller(killers *[maxSearchPly][2]Move, ply int, move Move) {

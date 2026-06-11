@@ -97,10 +97,10 @@ func PieceValue(pieceType int8) int {
 func IsOffBoard(square int) bool {
 	return (square & 0x88) != 0
 }
-func FindKing(pos *Position, color int8) int {
+func FindKing(pos *Position) int {
 	king := WhiteKing
 	cachedSquare := pos.WhiteKingSquare
-	if color < 0 {
+	if pos.SideToMove < 0 {
 		king = BlackKing
 		cachedSquare = pos.BlackKingSquare
 	}
@@ -113,7 +113,7 @@ func FindKing(pos *Position, color int8) int {
 			continue
 		}
 		if int(piece) == king {
-			if color > 0 {
+			if pos.SideToMove > 0 {
 				pos.WhiteKingSquare = i
 			} else {
 				pos.BlackKingSquare = i
@@ -206,11 +206,11 @@ func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
 	return false
 }
 
-func InCheck(pos *Position, color int8, kingSquare int) bool {
+func InCheck(pos *Position, kingSquare int) bool {
 	if kingSquare == -1 {
 		return false
 	}
-	return IsSquareAttacked(pos, kingSquare, -color)
+	return IsSquareAttacked(pos, kingSquare, -pos.SideToMove)
 }
 
 func MakeMove(pos *Position, move Move) Undo {
