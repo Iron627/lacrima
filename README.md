@@ -29,4 +29,4 @@ DONE:
 
 GOAL: 2000 ELO
 
-current estimate vs stash v12: 1800 elo
+current estimate vs stash v12: 1882 elo
