@@ -109,7 +109,11 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			}
 		}
 	}
-
+	eval := Eval(pos)
+	rfpMargin := 80 * depth
+	if eval > rfpMargin+beta && !pvNode && !inCheck && depth <= 6 {
+		return eval, true
+	}
 	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos) && !pvNode {
 		undo := MakeNullMove(pos)
 		score, ok := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, ply+1, false, isCheckExtended, nil, false)
