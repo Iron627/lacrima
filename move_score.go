@@ -1,6 +1,5 @@
 package lacrima
 
-const checkMoveBonus = 1000
 const preferredMoveBonus = 1000000
 const killerMoveBonus = 900000
 const maxHistoryValue = 8192
@@ -23,12 +22,7 @@ func ScoreMove(pos *Position, move Move) int {
 	if move.Promotion != 0 {
 		score += PieceValue(PieceType(move.Promotion))
 	}
-	undo := MakeMove(pos, move)
-	kingSquare := FindKing(pos)
-	if InCheck(pos, kingSquare) {
-		score += checkMoveBonus
-	}
-	UnmakeMove(pos, undo)
+
 	return score
 }
 
