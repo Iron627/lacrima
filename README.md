@@ -23,7 +23,7 @@ DONE:
   - 1-ply check extensions
   - repetition detection
   - mate score handling
-  - move ordering with TT move, MVV/LVA-ish captures, promos, checks, killers, and history
+  - move ordering with TT move, MVV/LVA-ish captures, promos, killers, and history
   - principal variation search
   - late move reduction
   - reverse futility pruning
