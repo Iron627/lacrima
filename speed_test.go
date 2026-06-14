@@ -6,15 +6,11 @@ import (
 )
 
 var (
-	benchMoveSink  Move
-	benchMovesSink []Move
-	benchBoolSink  bool
-	benchIntSink   int
-	benchUintSink  uint64
-	benchUndoSink  Undo
+	benchMoveSink Move
+	benchUintSink uint64
 )
 
-var benchFENs = []struct {
+var benchPositions = []struct {
 	name string
 	fen  string
 }{
@@ -36,140 +32,82 @@ var benchFENs = []struct {
 	},
 }
 
-func BenchmarkGeneratePseudoLegalMovesInto(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		b.Run(tc.name, func(b *testing.B) {
-			moves := make([]Move, 0, pseudoMoveCapacity)
-			for b.Loop() {
-				benchMovesSink = GeneratePseudoLegalMovesInto(&pos, moves)
-			}
-		})
-	}
+type benchSearchCase struct {
+	name  string
+	fen   string
+	depth int
 }
 
-func BenchmarkGetLegalMoves(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				benchMovesSink = GetLegalMoves(&pos)
-			}
-		})
+func searchDepthCases() []benchSearchCase {
+	cases := []benchSearchCase{
+		{name: "startpos_d8", fen: startFEN, depth: 8},
+		{name: "kiwipete_d7", fen: benchPositions[1].fen, depth: 7},
+		{name: "middlegame_d7", fen: benchPositions[2].fen, depth: 7},
+		{name: "endgame_d8", fen: benchPositions[3].fen, depth: 8},
 	}
+
+	return cases
 }
 
-func BenchmarkIsSquareAttacked(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		kingSquare := FindKing(&pos)
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				benchBoolSink = IsSquareAttacked(&pos, kingSquare, -pos.SideToMove)
-			}
-		})
-	}
-}
-
-func BenchmarkInCheck(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				kingSquare := FindKing(&pos)
-				benchBoolSink = InCheck(&pos, kingSquare)
-			}
-		})
-	}
-}
-
-func BenchmarkEval(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				benchIntSink = Eval(&pos)
-			}
-		})
-	}
-}
-
-func BenchmarkMakeUnmakeMove(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		moves := GetLegalMoves(&pos)
-		if len(moves) == 0 {
-			b.Fatalf("%s has no legal moves", tc.name)
-		}
-		move := moves[0]
-
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				undo := MakeMove(&pos, move)
-				UnmakeMove(&pos, undo)
-				benchUndoSink = undo
-			}
-		})
-	}
-}
-
-func BenchmarkMoveFromUCI(b *testing.B) {
-	for _, tc := range benchFENs {
-		pos := mustBenchPosition(b, tc.fen)
-		moves := GetLegalMoves(&pos)
-		if len(moves) == 0 {
-			b.Fatalf("%s has no legal moves", tc.name)
-		}
-		uci := MoveToUCI(moves[len(moves)/2])
-
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				var ok bool
-				benchMoveSink, ok = MoveFromUCI(&pos, uci)
-				benchBoolSink = ok
-			}
-		})
-	}
-}
-
-func BenchmarkPerft(b *testing.B) {
-	cases := []struct {
-		name  string
-		fen   string
-		depth int
-	}{
-		{name: "startpos_d3", fen: startFEN, depth: 3},
-		{name: "kiwipete_d3", fen: benchFENs[1].fen, depth: 3},
-		{name: "endgame_d4", fen: benchFENs[3].fen, depth: 4},
-	}
+func BenchmarkSearchDepth(b *testing.B) {
+	cases := searchDepthCases()
 
 	for _, tc := range cases {
-		pos := mustBenchPosition(b, tc.fen)
-		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				benchUintSink = Perft(&pos, tc.depth)
-			}
-		})
-	}
-}
+		base := mustBenchPosition(b, tc.fen)
+		tt := NewTranspositionTable(transpositionTableEntriesForMB(defaultHashMB))
 
-func BenchmarkSearch(b *testing.B) {
-	cases := []struct {
-		name  string
-		fen   string
-		depth int
-	}{
-		{name: "startpos_d3", fen: startFEN, depth: 3},
-		{name: "kiwipete_d3", fen: benchFENs[1].fen, depth: 3},
-		{name: "endgame_d5", fen: benchFENs[3].fen, depth: 5},
-	}
-
-	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
-			for b.Loop() {
-				pos := mustBenchPosition(b, tc.fen)
+			b.ReportAllocs()
+
+			var totalNodes uint64
+			for i := 0; i < b.N; i++ {
+				b.StopTimer()
+				pos := base
+				tt.Clear()
 				var historyTable [2][128][128]int
-				benchMoveSink = searchBestMove(context.Background(), &pos, tc.depth, 0, nil, nil, NewTranspositionTable(transpositionTableEntriesForMB(defaultHashMB)), &historyTable)
+				var searchedNodes uint64
+				b.StartTimer()
+
+				benchMoveSink = searchBestMove(context.Background(), &pos, tc.depth, 0, nil, func(info SearchInfo) {
+					searchedNodes = info.Nodes
+				}, tt, &historyTable)
+				totalNodes += searchedNodes
+			}
+
+			if elapsed := b.Elapsed(); elapsed > 0 {
+				b.ReportMetric(float64(totalNodes)/elapsed.Seconds(), "nodes/s")
+			}
+		})
+	}
+}
+
+func BenchmarkPerftBaseline(b *testing.B) {
+	cases := []struct {
+		name  string
+		fen   string
+		depth int
+	}{
+		{name: "startpos_d4", fen: startFEN, depth: 4},
+		{name: "kiwipete_d3", fen: benchPositions[1].fen, depth: 3},
+		{name: "middlegame_d3", fen: benchPositions[2].fen, depth: 3},
+		{name: "endgame_d5", fen: benchPositions[3].fen, depth: 5},
+	}
+
+	for _, tc := range cases {
+		base := mustBenchPosition(b, tc.fen)
+		b.Run(tc.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			var totalNodes uint64
+			for i := 0; i < b.N; i++ {
+				pos := base
+				nodes := Perft(&pos, tc.depth)
+				benchUintSink = nodes
+				totalNodes += nodes
+			}
+
+			if elapsed := b.Elapsed(); elapsed > 0 {
+				b.ReportMetric(float64(totalNodes)/elapsed.Seconds(), "nodes/s")
 			}
 		})
 	}
