@@ -2,6 +2,7 @@ package lacrima
 
 import (
 	"context"
+	"math"
 	stdtime "time"
 )
 
@@ -12,7 +13,6 @@ const repetitionDrawScore = 0
 const nullMoveReduction = 2
 const maxSearchPly = 128
 const aspirationWindow = 50
-const LMReduction = 2
 
 type SearchInfo struct {
 	Depth      int
@@ -90,7 +90,11 @@ func drawScore(isRoot bool) int {
 	}
 	return repetitionDrawScore
 }
+func lmReduction(depth int, moveIndex int) int {
+	moveIndex++
 
+	return int(0.8 + math.Log(float64(depth))*math.Log(float64(moveIndex))/2.5)
+}
 func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move, pvNode bool) int {
 	isRoot := rootBestMove != nil
 	sideToMove := pos.SideToMove
@@ -223,7 +227,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		} else {
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
-					score = negamax(search, pos, depth-1-LMReduction, -alpha-1, -alpha, ply+1, false, isCheckExtended, nil, false)
+					score = negamax(search, pos, depth-1-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, isCheckExtended, nil, false)
 					score = -score
 
 					if search.ok && score > alpha {
