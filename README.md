@@ -12,7 +12,7 @@ DONE:
   - position/go/stop/quit/setoption/ucinewgame/isready/uci
   - custom perft command
   - time management and search cancellation
-  - PESTO tapered eval with material + piece-square tables
+  - texel-tuned eval using PESTO tapered eval with material + piece-square tables as a starting point
   - negamax with a/b pruning
   - iterative deepening
   - aspiration windows
@@ -30,4 +30,4 @@ DONE:
 
 GOAL: 2000 ELO
 
-current estimate vs stash v13: 1954 elo
+current estimate vs stash v13: 1970 elo
