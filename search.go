@@ -377,6 +377,8 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
 		alpha := -mateScore
 		beta := mateScore
+		deltaA := aspirationWindow
+		deltaB := aspirationWindow
 		if currentDepth > 1 {
 			alpha = previousScore - aspirationWindow
 			if alpha < -mateScore {
@@ -402,14 +404,21 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			}
 
 			if score <= alpha && alpha > -mateScore {
-				alpha = -mateScore
-				beta = mateScore
+				alpha = score - deltaA
+				if alpha < -mateScore {
+					alpha = -mateScore
+				}
+				deltaA *= 2
 				continue
 			}
 
 			if score >= beta && beta < mateScore {
-				alpha = -mateScore
-				beta = mateScore
+				beta = score + deltaB
+				if beta > mateScore {
+					beta = mateScore
+				}
+
+				deltaB *= 2
 				continue
 			}
 
