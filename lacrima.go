@@ -10,13 +10,39 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 const infiniteDepth = 100
 
 func RunUCI() {
+	if len(os.Args) > 1 && os.Args[1] == "bench" {
+		RunBench(os.Stdout)
+		return
+	}
+
 	RunUCIWithIO(os.Stdin, os.Stdout, os.Stderr)
+}
+
+func RunBench(output io.Writer) {
+	pos, _ := PositionFromFEN(startFEN)
+	tt := NewTranspositionTable(transpositionTableEntriesForMB(defaultHashMB))
+	var historyTable [2][128][128]int
+	var nodes uint64
+
+	start := time.Now()
+	searchBestMove(context.Background(), &pos, 8, 0, nil, func(info SearchInfo) {
+		nodes = info.Nodes
+	}, tt, &historyTable)
+	elapsed := time.Since(start)
+
+	nps := uint64(0)
+	if elapsed > 0 {
+		nps = uint64(float64(nodes) / elapsed.Seconds())
+	}
+
+	fmt.Fprintf(output, "%d nodes %d nps\n", nodes, nps)
 }
 
 func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
@@ -64,6 +90,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			writeLine("id name Lacrima v1.0.9.8")
 			writeLine("id author Iron")
 			writeLine("option name Hash type spin default", defaultHashMB, "min", minHashMB, "max", maxHashMB)
+			writeLine("option name Threads type spin default 1 min 1 max 1")
 			writeLine("option name Clear Hash type button")
 			writeLine("uciok")
 
