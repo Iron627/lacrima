@@ -95,6 +95,25 @@ func lmReduction(depth int, moveIndex int) int {
 
 	return int(0.8 + math.Log(float64(depth))*math.Log(float64(moveIndex))/2.5)
 }
+
+func absInt(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func updateHistory(history *[2][128][128]int, side int, from int, to int, bonus int) {
+	if bonus > maxHistoryValue {
+		bonus = maxHistoryValue
+	} else if bonus < -maxHistoryValue {
+		bonus = -maxHistoryValue
+	}
+
+	h := history[side][from][to]
+	h += bonus - h*absInt(bonus)/maxHistoryValue
+	history[side][from][to] = h
+}
 func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move, pvNode bool) int {
 	isRoot := rootBestMove != nil
 	sideToMove := pos.SideToMove
@@ -204,10 +223,13 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	bestMove := Move{}
 	bestScore := -mateScore
 	searchedMoves := 0
+	var quietsTried [256]Move
+	quietsTriedCount := 0
 
 	for pseudoMoveIndex := range moves {
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
 		tactical := isTacticalMove(pos, move)
+		quiet := isQuietMove(pos, move)
 		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
 		if !legal {
 			continue
@@ -215,6 +237,11 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 		moveIndex := searchedMoves
 		searchedMoves++
+
+		if !isRoot && quiet && quietsTriedCount < len(quietsTried) {
+			quietsTried[quietsTriedCount] = move
+			quietsTriedCount++
+		}
 
 		repetitionKey, count := pushRepetition(search.history, pos)
 
@@ -266,15 +293,22 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			}
 		}
 		if score >= beta {
-			if !isRoot && isQuietMove(pos, move) {
+			if !isRoot && quiet {
 				side := 0
 				if sideToMove < 0 {
 					side = 1
 				}
 
-				search.historyTable[side][move.From][move.To] += depth * depth
-				if search.historyTable[side][move.From][move.To] > maxHistoryValue {
-					search.historyTable[side][move.From][move.To] = maxHistoryValue
+				bonus := depth * depth
+				updateHistory(search.historyTable, side, move.From, move.To, bonus)
+
+				for i := 0; i < quietsTriedCount; i++ {
+					quietMove := quietsTried[i]
+					if quietMove == move {
+						continue
+					}
+
+					updateHistory(search.historyTable, side, quietMove.From, quietMove.To, -bonus)
 				}
 
 				if ply >= 0 && ply < maxSearchPly {
