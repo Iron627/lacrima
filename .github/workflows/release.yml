@@ -37,6 +37,9 @@ jobs:
       matrix:
         goos: [linux, darwin, windows, android]
         goarch: [amd64, arm64]
+        exclude:
+          - goos: android
+            goarch: amd64
 
     steps:
       - uses: actions/checkout@v5
