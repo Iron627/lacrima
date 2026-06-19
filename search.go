@@ -6,13 +6,15 @@ import (
 	stdtime "time"
 )
 
-const mateScore = 100000
-const fiftyMoveRuleHalfmoves = 100
-const repetitionAvoidanceScore = -1
-const repetitionDrawScore = 0
-const nullMoveReduction = 2
-const maxSearchPly = 128
-const aspirationWindow = 50
+const (
+	mateScore                = 100000
+	fiftyMoveRuleHalfmoves   = 100
+	repetitionAvoidanceScore = -1
+	repetitionDrawScore      = 0
+	nullMoveReduction        = 2
+	maxSearchPly             = 128
+	aspirationWindow         = 50
+)
 
 type SearchInfo struct {
 	Depth      int
@@ -90,6 +92,7 @@ func drawScore(isRoot bool) int {
 	}
 	return repetitionDrawScore
 }
+
 func lmReduction(depth int, moveIndex int) int {
 	moveIndex++
 
@@ -114,17 +117,14 @@ func updateHistory(history *[2][128][128]int, side int, from int, to int, bonus 
 	h += bonus - h*absInt(bonus)/maxHistoryValue
 	history[side][from][to] = h
 }
-func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, isCheckExtended bool, rootBestMove *Move, pvNode bool) int {
+
+func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, rootBestMove *Move, pvNode bool) int {
 	isRoot := rootBestMove != nil
 	sideToMove := pos.SideToMove
 
 	if searchContextStopped(search) {
 		search.ok = false
 		return 0
-	}
-
-	if !isRoot && search.history != nil && search.history[positionKey(pos)] >= 3 {
-		return repetitionDrawScore
 	}
 
 	if !isRoot {
@@ -139,13 +139,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	}
 
 	if depth <= 0 {
-		if !isCheckExtended && inCheck {
-			return negamax(search, pos, 1, alpha, beta, ply, allowNull, true, rootBestMove, pvNode)
-		}
-		if !inCheck {
-			return quiesce(search, pos, alpha, beta, ply)
-		}
-		return Eval(pos)
+		return quiesce(search, pos, alpha, beta, ply)
 	}
 
 	key := positionKey(pos)
@@ -180,7 +174,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	}
 	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos) && !pvNode {
 		undo := MakeNullMove(pos)
-		score := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, ply+1, false, isCheckExtended, nil, false)
+		score := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, ply+1, false, nil, false)
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -203,20 +197,6 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		killerB = search.killers[ply][1]
 	}
 
-	if len(moves) == 0 {
-		if inCheck {
-			return -mateScore + ply
-		}
-		return 0
-	}
-
-	if !isRoot && fiftyMoveDraw && inCheck {
-		if _, ok := firstLegalMove(pos, moves); ok {
-			return repetitionDrawScore
-		}
-		return -mateScore + ply
-	}
-
 	scores := scoreBuf[:len(moves)]
 	scoreMoves(pos, moves, ttMove, killerA, killerB, search.historyTable, scores)
 
@@ -225,6 +205,13 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	searchedMoves := 0
 	var quietsTried [256]Move
 	quietsTriedCount := 0
+
+	extension := 0
+	if inCheck {
+		extension += 1
+	}
+
+	newDepth := depth + extension - 1
 
 	for pseudoMoveIndex := range moves {
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
@@ -246,40 +233,32 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		repetitionKey, count := pushRepetition(search.history, pos)
 
 		var score int
-		var scoreKnown bool
-		if score, scoreKnown = scoreAfterMoveIfFiftyMoveDraw(pos, ply, isRoot); scoreKnown {
-		} else if count >= 3 {
+		if count >= 2 {
 			score = drawScore(isRoot)
-			scoreKnown = true
 		} else {
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
-					score = negamax(search, pos, depth-1-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, isCheckExtended, nil, false)
+					score = negamax(search, pos, newDepth-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false)
 					score = -score
 
 					if search.ok && score > alpha {
-						score = negamax(search, pos, depth-1, -alpha-1, -alpha, ply+1, true, isCheckExtended, nil, false)
+						score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false)
 						score = -score
 					}
 				} else {
-					score = negamax(search, pos, depth-1, -alpha-1, -alpha, ply+1, true, isCheckExtended, nil, false)
+					score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false)
 					score = -score
 				}
 			}
 
 			if pvNode && (moveIndex == 0 || score > alpha) {
-				score = negamax(search, pos, depth-1, -beta, -alpha, ply+1, true, isCheckExtended, nil, true)
+				score = negamax(search, pos, newDepth, -beta, -alpha, ply+1, true, nil, true)
 				score = -score
 			}
-			scoreKnown = true
 		}
 		popRepetition(search.history, repetitionKey)
 
 		UnmakeMove(pos, undo)
-
-		if !scoreKnown {
-			continue
-		}
 
 		if !search.ok {
 			return 0
@@ -358,25 +337,6 @@ func hasNonPawnMaterial(pos *Position) bool {
 	return false
 }
 
-func scoreAfterMoveIfFiftyMoveDraw(pos *Position, ply int, isRoot bool) (int, bool) {
-	if !isFiftyMoveRuleDraw(pos) {
-		return 0, false
-	}
-
-	kingSquare := FindKing(pos)
-	if !InCheck(pos, kingSquare) {
-		return drawScore(isRoot), true
-	}
-
-	var pseudoBuf [256]Move
-	moves := GeneratePseudoLegalMovesInto(pos, pseudoBuf[:0])
-	if _, ok := firstLegalMove(pos, moves); ok {
-		return drawScore(isRoot), true
-	}
-
-	return mateScore - (ply + 1), true
-}
-
 func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int) Move {
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
@@ -430,7 +390,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
-			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, false, &move, true)
+			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true)
 			totalNodes += search.nodes
 
 			if !search.ok {
