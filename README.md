@@ -28,5 +28,6 @@ DONE:
   - reverse futility pruning
 
 GOAL: 2500 ELO
-
+ALL NON-FULL VERSIONS (1.0.1-1.0.9 etc) ARE DEV VERSIONS AND NOT TO BE TESTED
+ONLY v1.1,v1.2 etc are full releases
 current estimate vs stash v14: 2113 elo
