@@ -20,14 +20,13 @@ DONE:
   - configurable hash size + clear hash
   - ordered quiescence search
   - null-move pruning
-  - 1-ply check extensions
   - repetition detection
   - mate score handling
-  - move ordering with TT move, MVV/LVA-ish captures, promos, killers, and history
+  - move ordering with TT move, MVV/LVA, promos, killers, and history
   - principal variation search
   - late move reduction
   - reverse futility pruning
 
-GOAL: 2000 ELO
+GOAL: 2500 ELO
 
-current estimate vs stash v13: 1970 elo
+current estimate vs stash v14: 2113 elo
