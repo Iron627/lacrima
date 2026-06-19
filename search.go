@@ -118,7 +118,8 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	if !isRoot && fiftyMoveDraw && !inCheck {
 		return repetitionDrawScore
 	}
-
+	var pseudoBuf [256]Move
+	moves := GeneratePseudoLegalMovesInto(pos, pseudoBuf[:0])
 	if depth <= 0 {
 		if !isCheckExtended && inCheck {
 			return negamax(search, pos, 1, alpha, beta, ply, allowNull, true, rootBestMove, pvNode)
@@ -126,7 +127,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		if !inCheck {
 			return quiesce(search, pos, alpha, beta, ply)
 		}
-		return Eval(pos)
+		return Eval(pos, len(moves))
 	}
 
 	key := positionKey(pos)
@@ -154,7 +155,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			}
 		}
 	}
-	eval := Eval(pos)
+	eval := Eval(pos, len(moves))
 	rfpMargin := 80 * depth
 	if eval > rfpMargin+beta && !pvNode && !inCheck && depth <= 6 {
 		return eval
@@ -175,9 +176,8 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 	}
 
-	var pseudoBuf [256]Move
 	var scoreBuf [256]int
-	moves := GeneratePseudoLegalMovesInto(pos, pseudoBuf[:0])
+
 	var killerA, killerB Move
 	if !isRoot && ply >= 0 && ply < maxSearchPly {
 		killerA = search.killers[ply][0]
@@ -506,9 +506,10 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 			return ttScore
 		}
 	}
-
+	var pseudoMoveBuffer [256]Move
+	moves := GeneratePseudoLegalMovesInto(pos, pseudoMoveBuffer[:0])
 	if !inCheck {
-		score := Eval(pos)
+		score := Eval(pos, len(moves))
 
 		if score >= beta {
 			search.tt.Store(key, 0, scoreToTT(score, ply), TTLowerBound, Move{})
@@ -519,13 +520,11 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 		}
 	}
 
-	var pseudoMoveBuffer [256]Move
 	var scoreBuffer [256]int
-	var moves []Move
 	if inCheck {
-		moves = GeneratePseudoLegalMovesInto(pos, pseudoMoveBuffer[:0])
+
 	} else {
-		moves = getPseudoTacticalMovesInto(pos, pseudoMoveBuffer[:0])
+		moves = filterTacticalMoves(pos, moves)
 	}
 	scores := scoreBuffer[:len(moves)]
 	qScoreMoves(pos, moves, ttMove, scores)
