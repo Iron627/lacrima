@@ -206,13 +206,6 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	var quietsTried [256]Move
 	quietsTriedCount := 0
 
-	extension := 0
-	if inCheck {
-		extension += 1
-	}
-
-	newDepth := depth + extension - 1
-
 	for pseudoMoveIndex := range moves {
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
 		tactical := isTacticalMove(pos, move)
@@ -238,21 +231,21 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		} else {
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
-					score = negamax(search, pos, newDepth-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false)
+					score = negamax(search, pos, depth-1-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false)
 					score = -score
 
 					if search.ok && score > alpha {
-						score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false)
+						score = negamax(search, pos, depth-1, -alpha-1, -alpha, ply+1, true, nil, false)
 						score = -score
 					}
 				} else {
-					score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false)
+					score = negamax(search, pos, depth-1, -alpha-1, -alpha, ply+1, true, nil, false)
 					score = -score
 				}
 			}
 
 			if pvNode && (moveIndex == 0 || score > alpha) {
-				score = negamax(search, pos, newDepth, -beta, -alpha, ply+1, true, nil, true)
+				score = negamax(search, pos, depth-1, -beta, -alpha, ply+1, true, nil, true)
 				score = -score
 			}
 		}
