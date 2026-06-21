@@ -14,6 +14,7 @@ const (
 	nullMoveReduction        = 2
 	maxSearchPly             = 128
 	aspirationWindow         = 50
+	iiReduction              = 2
 )
 
 type SearchInfo struct {
@@ -167,6 +168,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			}
 		}
 	}
+
 	eval := Eval(pos)
 	rfpMargin := 80 * depth
 	if eval > rfpMargin+beta && !pvNode && !inCheck && depth <= 6 {
@@ -187,7 +189,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			return score
 		}
 	}
-
+	if ttMove == (Move{}) && pvNode && !isRoot && depth > 5 {
+		depth -= iiReduction
+	}
 	var pseudoBuf [256]Move
 	var scoreBuf [256]int
 	moves := GeneratePseudoLegalMovesInto(pos, pseudoBuf[:0])
