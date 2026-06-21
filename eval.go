@@ -5,6 +5,7 @@ func Eval(pos *Position) int {
 	eg := [2]int{}
 	gamePhase := 0
 	pawns := make([]int, 0, 16)
+	bishopCount := [2]int{}
 	for sq, piece := range pos.Board {
 		if IsOffBoard(sq) || piece == Empty {
 			continue
@@ -19,6 +20,9 @@ func Eval(pos *Position) int {
 		if pt == 0 {
 			pawns = append(pawns, sq)
 		}
+		if pt == 2 {
+			bishopCount[side]++
+		}
 		pstSq := sq64(sq)
 
 		if side == 1 {
@@ -29,6 +33,12 @@ func Eval(pos *Position) int {
 		eg[side] += EgValue[pt] + EgPestoTable[pt][pstSq]
 
 		gamePhase += GamePhaseInc[pt]
+	}
+	for side, count := range bishopCount {
+		if count >= 2 {
+			mg[side] += BishopPairMgBonus
+			eg[side] += BishopPairEgBonus
+		}
 	}
 
 	for _, sq := range pawns {
