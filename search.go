@@ -336,7 +336,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 	if searchedMoves == 0 {
 		if isExcludedSearch {
-			return bestScore
+			return bestScore // only move that evades mate or something so its ok to return mate score - matt
 		}
 		if inCheck {
 			return -mateScore + ply
