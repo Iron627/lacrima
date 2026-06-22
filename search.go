@@ -14,6 +14,10 @@ const (
 	nullMoveReduction        = 2
 	maxSearchPly             = 128
 	aspirationWindow         = 50
+	seDepthMult              = 3
+	seReductionOffset        = 1
+	seReductionDivisor       = 2
+	seDepthOffset            = 3
 )
 
 type SearchInfo struct {
@@ -118,9 +122,11 @@ func updateHistory(history *[2][128][128]int, side int, from int, to int, bonus 
 	history[side][from][to] = h
 }
 
-func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, rootBestMove *Move, pvNode bool) int {
+func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, rootBestMove *Move, pvNode bool, excludeMove Move) int {
 	isRoot := rootBestMove != nil
+	isExcludedSearch := excludeMove != (Move{})
 	sideToMove := pos.SideToMove
+	expectFailHigh := true
 
 	if searchContextStopped(search) {
 		search.ok = false
@@ -145,9 +151,12 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	key := positionKey(pos)
 	originalAlpha := alpha
 	var ttMove Move
-	if entry, ok := search.tt.Probe(key); ok {
+	var ttScore int
+	var ttDepth int
+	if entry, ok := search.tt.Probe(key); ok && !isExcludedSearch {
 		ttMove = entry.Move
-		ttScore := scoreFromTT(entry.Score, ply)
+		ttScore = scoreFromTT(entry.Score, ply)
+		ttDepth = entry.Depth
 		if !isRoot && entry.Depth >= depth {
 			switch entry.Flag {
 			case TTExact:
@@ -159,6 +168,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			case TTUpperBound:
 				if ttScore < beta {
 					beta = ttScore
+					expectFailHigh = false
 				}
 			}
 
@@ -169,12 +179,12 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	}
 	eval := Eval(pos)
 	rfpMargin := 80 * depth
-	if eval > rfpMargin+beta && !pvNode && !inCheck && depth <= 6 {
+	if eval > rfpMargin+beta && !pvNode && !inCheck && depth <= 6 && !isExcludedSearch {
 		return eval
 	}
-	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos) && !pvNode {
+	if !isRoot && allowNull && depth >= 3 && !inCheck && hasNonPawnMaterial(pos) && !pvNode && !isExcludedSearch {
 		undo := MakeNullMove(pos)
-		score := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, ply+1, false, nil, false)
+		score := negamax(search, pos, depth-1-nullMoveReduction, -beta, -beta+1, ply+1, false, nil, false, Move{})
 		score = -score
 		UnmakeNullMove(pos, undo)
 
@@ -183,7 +193,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 
 		if score >= beta {
-			search.tt.Store(key, depth, scoreToTT(beta, ply), TTLowerBound, Move{})
+			if !isExcludedSearch {
+				search.tt.Store(key, depth, scoreToTT(beta, ply), TTLowerBound, Move{})
+			}
 			return score
 		}
 	}
@@ -211,12 +223,28 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		extension += 1
 	}
 
-	newDepth := depth + extension - 1
-
 	for pseudoMoveIndex := range moves {
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
 		tactical := isTacticalMove(pos, move)
 		quiet := isQuietMove(pos, move)
+		if isExcludedSearch && move == excludeMove {
+			continue
+		}
+		moveExtension := extension
+		if move == ttMove && depth >= 7 && !isRoot && (expectFailHigh || pvNode) && depth <= ttDepth+seDepthOffset && !isExcludedSearch {
+			seBeta := ttScore - seDepthMult*depth
+			seAlpha := seBeta - 1
+			seDepth := (depth - seReductionOffset) / seReductionDivisor
+			if seDepth < 1 {
+				seDepth = 1
+			}
+			seScore := negamax(search, pos, seDepth, seAlpha, seBeta, ply, false, nil, false, ttMove)
+			if seScore < seBeta {
+				moveExtension++
+			}
+
+		}
+		newDepth := depth + moveExtension - 1
 		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
 		if !legal {
 			continue
@@ -238,21 +266,21 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		} else {
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
-					score = negamax(search, pos, newDepth-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false)
+					score = negamax(search, pos, newDepth-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false, Move{})
 					score = -score
 
 					if search.ok && score > alpha {
-						score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false)
+						score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false, Move{})
 						score = -score
 					}
 				} else {
-					score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false)
+					score = negamax(search, pos, newDepth, -alpha-1, -alpha, ply+1, true, nil, false, Move{})
 					score = -score
 				}
 			}
 
 			if pvNode && (moveIndex == 0 || score > alpha) {
-				score = negamax(search, pos, newDepth, -beta, -alpha, ply+1, true, nil, true)
+				score = negamax(search, pos, newDepth, -beta, -alpha, ply+1, true, nil, true, Move{})
 				score = -score
 			}
 		}
@@ -295,7 +323,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 				}
 			}
 
-			search.tt.Store(key, depth, scoreToTT(score, ply), TTLowerBound, move)
+			if !isExcludedSearch {
+				search.tt.Store(key, depth, scoreToTT(score, ply), TTLowerBound, move)
+			}
 			return score
 		}
 
@@ -305,6 +335,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	}
 
 	if searchedMoves == 0 {
+		if isExcludedSearch {
+			return bestScore
+		}
 		if inCheck {
 			return -mateScore + ply
 		}
@@ -315,7 +348,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	if bestScore <= originalAlpha {
 		flag = TTUpperBound
 	}
-	search.tt.Store(key, depth, scoreToTT(bestScore, ply), flag, bestMove)
+	if !isExcludedSearch {
+		search.tt.Store(key, depth, scoreToTT(bestScore, ply), flag, bestMove)
+	}
 
 	return bestScore
 }
@@ -390,7 +425,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
-			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true)
+			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true, Move{})
 			totalNodes += search.nodes
 
 			if !search.ok {
