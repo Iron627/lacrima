@@ -7,13 +7,18 @@ import (
 )
 
 const (
+	nullMoveReduction = 2
+	aspirationWindow  = 50
+	fpMarginOffset    = 250
+	fpMarginMult      = 60
+)
+const (
+	maxSearchPly             = 128
 	mateScore                = 100000
 	fiftyMoveRuleHalfmoves   = 100
 	repetitionAvoidanceScore = -1
 	repetitionDrawScore      = 0
-	nullMoveReduction        = 2
-	maxSearchPly             = 128
-	aspirationWindow         = 50
+	mated                    = -mateScore + maxSearchPly
 )
 
 type SearchInfo struct {
@@ -217,6 +222,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
 		tactical := isTacticalMove(pos, move)
 		quiet := isQuietMove(pos, move)
+		if eval+fpMarginOffset+fpMarginMult*depth <= alpha && !inCheck && !tactical && bestScore > mated && depth <= 5 {
+			continue
+		}
 		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
 		if !legal {
 			continue
@@ -236,6 +244,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		if count >= 2 {
 			score = drawScore(isRoot)
 		} else {
+
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
 					score = negamax(search, pos, newDepth-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false)
