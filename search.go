@@ -91,6 +91,17 @@ func isFiftyMoveRuleDraw(pos *Position) bool {
 	return pos.HalfmoveClock >= fiftyMoveRuleHalfmoves
 }
 
+func currentKingSquare(pos *Position) int {
+	square := pos.WhiteKingSquare
+	if pos.SideToMove == Black {
+		square = pos.BlackKingSquare
+	}
+	if square == Empty {
+		return -1
+	}
+	return int(square)
+}
+
 func drawScore(isRoot bool) int {
 	if isRoot {
 		return repetitionAvoidanceScore
@@ -111,7 +122,7 @@ func absInt(x int) int {
 	return x
 }
 
-func updateHistory(history *[2][128][128]int, side int, from int, to int, bonus int) {
+func updateHistory(history *[2][128][128]int, side int, from uint8, to uint8, bonus int) {
 	if bonus > maxHistoryValue {
 		bonus = maxHistoryValue
 	} else if bonus < -maxHistoryValue {
@@ -135,7 +146,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	if !isRoot {
 		search.nodes++
 	}
-	kingSquare := FindKing(pos)
+	kingSquare := currentKingSquare(pos)
 	inCheck := InCheck(pos, kingSquare)
 	fiftyMoveDraw := isFiftyMoveRuleDraw(pos)
 
@@ -282,10 +293,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 		if score >= beta {
 			if !isRoot && quiet {
-				side := 0
-				if sideToMove < 0 {
-					side = 1
-				}
+				side := int(sideToMove)
 
 				bonus := depth * depth
 				updateHistory(search.historyTable, side, move.From, move.To, bonus)
@@ -330,20 +338,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 }
 
 func hasNonPawnMaterial(pos *Position) bool {
-	sideToMove := pos.SideToMove
-
-	for square, piece := range pos.Board {
-		if IsOffBoard(square) || piece == Empty || (piece > 0) != (sideToMove > 0) {
-			continue
-		}
-
-		pieceType := PieceType(piece)
-		if pieceType != WhitePawn && pieceType != WhiteKing {
-			return true
-		}
-	}
-
-	return false
+	return pos.Board.Colours[pos.SideToMove]&^(pos.Board.Pieces[Pawn]|pos.Board.Pieces[King]) != 0
 }
 
 func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int) Move {
@@ -450,7 +445,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 }
 
 func firstLegalMove(pos *Position, moves []Move) (Move, bool) {
-	kingSquare := FindKing(pos)
+	kingSquare := currentKingSquare(pos)
 
 	for _, move := range moves {
 		undo, ok := makeMoveIfLegal(pos, move, kingSquare)
@@ -466,10 +461,10 @@ func firstLegalMove(pos *Position, moves []Move) (Move, bool) {
 }
 
 func isQuietMove(pos *Position, move Move) bool {
-	if move.isEnPassant || move.Promotion != 0 || move.isCastling {
+	if move.isEnPassant || isPromotion(move) || move.isCastling {
 		return false
 	}
-	return pos.Board[move.To] == Empty
+	return pos.PieceAt(move.To) == Empty
 }
 
 func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int) int {
@@ -486,7 +481,7 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 
 	key := positionKey(pos)
 	originalAlpha := alpha
-	kingSquare := FindKing(pos)
+	kingSquare := currentKingSquare(pos)
 	inCheck := InCheck(pos, kingSquare)
 
 	var ttMove Move
@@ -581,10 +576,10 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 }
 
 func isTacticalMove(pos *Position, move Move) bool {
-	if move.isEnPassant || move.Promotion != 0 {
+	if move.isEnPassant || isPromotion(move) {
 		return true
 	}
-	return pos.Board[move.To] != Empty
+	return pos.PieceAt(move.To) != Empty
 }
 
 func filterTacticalMoves(pos *Position, moves []Move) []Move {

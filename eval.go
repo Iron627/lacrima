@@ -1,38 +1,32 @@
 package lacrima
 
+import "math/bits"
+
+var passedPawnMasks = initPassedPawnMasks()
+
 func Eval(pos *Position) int {
 	mg := [2]int{}
 	eg := [2]int{}
 	gamePhase := 0
-	pawns := make([]int, 0, 16)
-	bishopCount := [2]int{}
-	for sq, piece := range pos.Board {
-		if IsOffBoard(sq) || piece == Empty {
-			continue
-		}
+	bishopCount := [2]int{
+		bits.OnesCount64(uint64(pos.Board.GetPieceBoard(White, Bishop))),
+		bits.OnesCount64(uint64(pos.Board.GetPieceBoard(Black, Bishop))),
+	}
+	for side := 0; side < 2; side++ {
+		for pt := Pawn; pt <= King; pt++ {
+			pieces := pos.Board.GetPieceBoard(uint8(side), uint8(pt))
+			for pieces != 0 {
+				sq := popLSB(&pieces)
+				pstSq := sq64(sq)
+				if side == Black {
+					pstSq ^= 56
+				}
 
-		side := 0
-		if piece < 0 {
-			side = 1
+				mg[side] += MgValue[pt] + MgPestoTable[pt][pstSq]
+				eg[side] += EgValue[pt] + EgPestoTable[pt][pstSq]
+				gamePhase += GamePhaseInc[pt]
+			}
 		}
-
-		pt := int(PieceType(piece)) - 1
-		if pt == 0 {
-			pawns = append(pawns, sq)
-		}
-		if pt == 2 {
-			bishopCount[side]++
-		}
-		pstSq := sq64(sq)
-
-		if side == 1 {
-			pstSq ^= 56
-		}
-
-		mg[side] += MgValue[pt] + MgPestoTable[pt][pstSq]
-		eg[side] += EgValue[pt] + EgPestoTable[pt][pstSq]
-
-		gamePhase += GamePhaseInc[pt]
 	}
 	for side, count := range bishopCount {
 		if count >= 2 {
@@ -41,21 +35,23 @@ func Eval(pos *Position) int {
 		}
 	}
 
-	for _, sq := range pawns {
-		if !isPassed(pos, sq, pawns) {
-			continue
-		}
+	for side := 0; side < 2; side++ {
+		pawns := pos.Board.GetPieceBoard(uint8(side), Pawn)
+		enemyPawns := pos.Board.GetPieceBoard(uint8(side^1), Pawn)
+		for pawns != 0 {
+			sq := popLSB(&pawns)
+			if enemyPawns&passedPawnMasks[side][sq] != 0 {
+				continue
+			}
 
-		piece := pos.Board[sq]
-		side := 0
-		advance := sq >> 4
-		if piece < 0 {
-			side = 1
-			advance = 7 - (sq >> 4)
-		}
+			advance := sq / 8
+			if side == Black {
+				advance = 7 - advance
+			}
 
-		mg[side] += PassedPawnMgBonus[advance]
-		eg[side] += PassedPawnEgBonus[advance]
+			mg[side] += PassedPawnMgBonus[advance]
+			eg[side] += PassedPawnEgBonus[advance]
+		}
 	}
 
 	if gamePhase > 24 {
@@ -70,7 +66,7 @@ func Eval(pos *Position) int {
 	score := (mgScore*gamePhase +
 		egScore*egPhase) / 24
 
-	if pos.SideToMove < 0 {
+	if pos.SideToMove == Black {
 		score = -score
 	}
 
@@ -78,42 +74,29 @@ func Eval(pos *Position) int {
 }
 
 func sq64(sq int) int {
-	rank := sq >> 4
+	rank := sq / 8
 	file := sq & 7
 
 	return (7-rank)*8 + file
 }
 
-func isPassed(pos *Position, sq int, pawns []int) bool {
-	pawn := pos.Board[sq]
-	if PieceType(pawn) != 1 {
-		return false
-	}
-
-	for _, p := range pawns {
-		if p == sq {
-			continue
-		}
-
-		fileDistance := (p & 7) - (sq & 7)
-		if fileDistance < 0 {
-			fileDistance = -fileDistance
-		}
-		if fileDistance > 1 {
-			continue
-		}
-
-		isAhead := pawn > 0 && p>>4 > sq>>4 ||
-			pawn < 0 && p>>4 < sq>>4
-		if !isAhead {
-			continue
-		}
-
-		otherPawn := pos.Board[p]
-		if p&7 == sq&7 || !SameColor(pawn, otherPawn) {
-			return false
+func initPassedPawnMasks() [2][64]Bitboard {
+	var masks [2][64]Bitboard
+	for sq := 0; sq < 64; sq++ {
+		rank := sq / 8
+		file := sq & 7
+		for _, df := range [...]int{-1, 0, 1} {
+			f := file + df
+			if f < 0 || f >= 8 {
+				continue
+			}
+			for r := rank + 1; r < 8; r++ {
+				masks[White][sq] |= Bitboard(1) << uint(r*8+f)
+			}
+			for r := rank - 1; r >= 0; r-- {
+				masks[Black][sq] |= Bitboard(1) << uint(r*8+f)
+			}
 		}
 	}
-
-	return true
+	return masks
 }

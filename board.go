@@ -1,425 +1,298 @@
 package lacrima
 
-type Board [128]int8
+const Empty uint8 = 255
+const (
+	Pawn = iota
+	Knight
+	Bishop
+	Rook
+	Queen
+	King
+)
+const (
+	White = 0
+	Black = 1
+)
+const (
+	WhiteKingSide  uint8 = 1 << 0
+	WhiteQueenSide uint8 = 1 << 1
+	BlackKingSide  uint8 = 1 << 2
+	BlackQueenSide uint8 = 1 << 3
+)
+
+type Mailbox [64]uint8
+type Bitboard uint64
+
 type Move struct {
-	From             int
-	To               int
-	Promotion        int8
+	From             uint8
+	To               uint8
+	Promotion        uint8
 	isCastling       bool
 	isEnPassant      bool
 	isDoublePawnPush bool
 }
 
-type Position struct {
-	Board           Board
-	SideToMove      int8
-	CastlingRights  uint8
-	EnPassantSquare int8
-	HalfmoveClock   int
-	FullmoveNumber  int
-	WhiteKingSquare int
-	BlackKingSquare int
-}
 type Undo struct {
 	Move            Move
-	CapturedPiece   int8
+	CapturedPiece   uint8
+	CapturedSquare  uint8
 	CastlingRights  uint8
-	EnPassantSquare int8
-	HalfmoveClock   int
+	EnPassantTarget int8
+	HalfmoveClock   uint8
 	FullmoveNumber  int
-	WhiteKingSquare int
-	BlackKingSquare int
+	WhiteKingSquare uint8
+	BlackKingSquare uint8
 }
+
 type NullUndo struct {
-	SideToMove      int8
-	EnPassantSquare int8
-	HalfmoveClock   int
+	SideToMove      uint8
+	EnPassantTarget int8
+	HalfmoveClock   uint8
 	FullmoveNumber  int
 }
 
-const (
-	WhiteKingside  uint8 = 1 << 0 // 0001
-	WhiteQueenside uint8 = 1 << 1 // 0010
-	BlackKingside  uint8 = 1 << 2 // 0100
-	BlackQueenside uint8 = 1 << 3 // 1000
-)
-const (
-	Empty       = 0
-	WhitePawn   = 1
-	WhiteKnight = 2
-	WhiteBishop = 3
-	WhiteRook   = 4
-	WhiteQueen  = 5
-	BlackPawn   = -1
-	BlackKnight = -2
-	BlackBishop = -3
-	BlackRook   = -4
-	BlackQueen  = -5
-	WhiteKing   = 6
-	BlackKing   = -6
-)
-
-var KnightOffsets = [8]int{
-	-33, -31, -18, -14,
-	14, 18, 31, 33,
+type Board struct {
+	Colours [2]Bitboard
+	Pieces  [6]Bitboard
 }
 
-func SameColor(a, b int8) bool {
-	return a != Empty && b != Empty && (a > 0) == (b > 0)
+func (board *Board) GetPieceBoard(colour uint8, piece uint8) Bitboard {
+	return board.Pieces[piece] & board.Colours[colour]
 }
 
-func PieceType(piece int8) int8 {
-	if piece < 0 {
-		return -piece
-	}
-	return piece
-
-}
-func PieceValue(pieceType int8) int {
-	switch pieceType {
-	case 1:
-		return 100
-	case 2:
-		return 320
-	case 3:
-		return 330
-	case 4:
-		return 500
-	case 5:
-		return 900
-	case 6:
-		return 20000
-	default:
-		return 0
-	}
+type Position struct {
+	Board           Board
+	Mailbox         Mailbox
+	SideToMove      uint8
+	CastlingRights  uint8
+	HalfmoveClock   uint8
+	FullmoveNumber  int
+	EnPassantTarget int8
+	WhiteKingSquare uint8
+	BlackKingSquare uint8
 }
 
-func IsOffBoard(square int) bool {
-	return (square & 0x88) != 0
+func (pos *Position) PieceAt(square uint8) uint8 {
+	return pos.Mailbox[square]
 }
-func FindKing(pos *Position) int {
-	king := WhiteKing
-	cachedSquare := pos.WhiteKingSquare
-	if pos.SideToMove < 0 {
-		king = BlackKing
-		cachedSquare = pos.BlackKingSquare
+func (pos *Position) ColourAt(square uint8) uint8 {
+	mask := Bitboard(1) << square
+	if pos.Board.Colours[White]&mask != 0 {
+		return White
 	}
-	if cachedSquare >= 0 && cachedSquare < len(pos.Board) &&
-		!IsOffBoard(cachedSquare) && int(pos.Board[cachedSquare]) == king {
-		return cachedSquare
+	if pos.Board.Colours[Black]&mask != 0 {
+		return Black
 	}
-	for i, piece := range pos.Board {
-		if IsOffBoard(i) {
-			continue
-		}
-		if int(piece) == king {
-			if pos.SideToMove > 0 {
-				pos.WhiteKingSquare = i
-			} else {
-				pos.BlackKingSquare = i
-			}
-			return i
-		}
-	}
-	return -1
+	return Empty
 }
-func IsSquareAttacked(pos *Position, square int, byColor int8) bool {
-	if IsOffBoard(square) {
-		return false
-	}
-
-	pawn := int8(WhitePawn)
-	knight := int8(WhiteKnight)
-	bishop := int8(WhiteBishop)
-	rook := int8(WhiteRook)
-	queen := int8(WhiteQueen)
-	king := int8(WhiteKing)
-	if byColor < 0 {
-		pawn = BlackPawn
-		knight = BlackKnight
-		bishop = BlackBishop
-		rook = BlackRook
-		queen = BlackQueen
-		king = BlackKing
-	}
-
-	if byColor < 0 {
-		from := square + S + W
-		if !IsOffBoard(from) && pos.Board[from] == pawn {
-			return true
-		}
-		from = square + S + E
-		if !IsOffBoard(from) && pos.Board[from] == pawn {
-			return true
-		}
-	} else {
-		from := square + N + W
-		if !IsOffBoard(from) && pos.Board[from] == pawn {
-			return true
-		}
-		from = square + N + E
-		if !IsOffBoard(from) && pos.Board[from] == pawn {
-			return true
-		}
-	}
-
-	for _, offset := range KnightOffsets {
-		from := square + offset
-		if !IsOffBoard(from) && pos.Board[from] == knight {
-			return true
-		}
-	}
-
-	for _, dir := range rookDirections {
-		for from := square + dir; !IsOffBoard(from); from += dir {
-			piece := pos.Board[from]
-			if piece == Empty {
-				continue
-			}
-			if piece == rook || piece == queen {
-				return true
-			}
-			break
-		}
-	}
-
-	for _, dir := range bishopDirections {
-		for from := square + dir; !IsOffBoard(from); from += dir {
-			piece := pos.Board[from]
-			if piece == Empty {
-				continue
-			}
-			if piece == bishop || piece == queen {
-				return true
-			}
-			break
-		}
-	}
-
-	for _, dir := range kingDirections {
-		from := square + dir
-		if !IsOffBoard(from) && pos.Board[from] == king {
-			return true
-		}
-	}
-
-	return false
+func (pos *Position) addPiece(sq uint8, colour uint8, piece uint8) {
+	var bb Bitboard = 1 << sq
+	pos.Board.Colours[colour] |= bb
+	pos.Board.Pieces[piece] |= bb
+	pos.Mailbox[sq] = piece
 }
 
-func InCheck(pos *Position, kingSquare int) bool {
-	if kingSquare == -1 {
-		return false
+func (pos *Position) removePiece(sq uint8) {
+	var bb Bitboard = 1 << sq
+	piece := pos.PieceAt(sq)
+	if piece == Empty {
+		return
 	}
-	return IsSquareAttacked(pos, kingSquare, -pos.SideToMove)
+	colour := pos.ColourAt(sq)
+	pos.Board.Colours[colour] &^= bb
+	pos.Board.Pieces[piece] &^= bb
+	pos.Mailbox[sq] = Empty
+}
+
+func (pos *Position) movePiece(from, to uint8) {
+	piece := pos.PieceAt(from)
+	colour := pos.ColourAt(from)
+	mask := (Bitboard(1) << from) | (Bitboard(1) << to)
+
+	pos.Board.Colours[colour] ^= mask
+	pos.Board.Pieces[piece] ^= mask
+
+	pos.Mailbox[to] = piece
+	pos.Mailbox[from] = Empty
+}
+
+func isPromotion(move Move) bool {
+	return move.Promotion != Pawn && move.Promotion != Empty
 }
 
 func MakeMove(pos *Position, move Move) Undo {
-	piece := pos.Board[move.From]
-	capturedPiece := pos.Board[move.To]
-	if move.isEnPassant {
-		capturedSquare := move.To
-		if piece > 0 {
-			capturedSquare -= S
-		} else {
-			capturedSquare -= N
-		}
-		capturedPiece = pos.Board[capturedSquare]
-	}
+	piece := pos.Mailbox[move.From]
+	colour := pos.ColourAt(move.From)
+	captured := pos.Mailbox[move.To]
+	capturedSquare := move.To
 
 	undo := Undo{
 		Move:            move,
-		CapturedPiece:   capturedPiece,
+		CapturedPiece:   captured,
+		CapturedSquare:  capturedSquare,
 		CastlingRights:  pos.CastlingRights,
-		EnPassantSquare: pos.EnPassantSquare,
+		EnPassantTarget: pos.EnPassantTarget,
 		HalfmoveClock:   pos.HalfmoveClock,
 		FullmoveNumber:  pos.FullmoveNumber,
 		WhiteKingSquare: pos.WhiteKingSquare,
 		BlackKingSquare: pos.BlackKingSquare,
 	}
 
-	pos.Board[move.To] = piece
-	pos.Board[move.From] = Empty
-
+	pos.EnPassantTarget = -1
 	if move.isDoublePawnPush {
-		if piece > 0 {
-			pos.EnPassantSquare = int8(move.From + S)
+		if colour == White {
+			pos.EnPassantTarget = int8(move.From + 8)
 		} else {
-			pos.EnPassantSquare = int8(move.From + N)
+			pos.EnPassantTarget = int8(move.From - 8)
 		}
-	} else {
-		pos.EnPassantSquare = -1
 	}
 
 	if move.isEnPassant {
-		capturedSquare := move.To
-		if piece > 0 {
-			capturedSquare -= S
+		if colour == White {
+			capturedSquare = move.To - 8
 		} else {
-			capturedSquare -= N
+			capturedSquare = move.To + 8
 		}
-		pos.Board[capturedSquare] = Empty
+		undo.CapturedSquare = capturedSquare
+		undo.CapturedPiece = pos.Mailbox[capturedSquare]
+		pos.removePiece(capturedSquare)
+	} else if captured != Empty {
+		pos.removePiece(move.To)
 	}
 
-	if move.Promotion != 0 {
-		if piece > 0 {
-			pos.Board[move.To] = move.Promotion
-		} else {
-			pos.Board[move.To] = -move.Promotion
-		}
+	pos.movePiece(move.From, move.To)
+
+	if isPromotion(move) {
+		pos.Board.Pieces[piece] &^= Bitboard(1) << move.To
+		pos.Board.Pieces[move.Promotion] |= Bitboard(1) << move.To
+		pos.Mailbox[move.To] = move.Promotion
 	}
 
-	switch piece {
-	case WhiteKing:
-		pos.WhiteKingSquare = move.To
-	case BlackKing:
-		pos.BlackKingSquare = move.To
+	if piece == King {
+		if colour == White {
+			pos.WhiteKingSquare = move.To
+		} else {
+			pos.BlackKingSquare = move.To
+		}
 	}
 
 	if move.isCastling {
 		switch move.To {
 		case 6:
-			pos.Board[7], pos.Board[5] = Empty, WhiteRook
+			pos.movePiece(7, 5)
 		case 2:
-			pos.Board[0], pos.Board[3] = Empty, WhiteRook
-		case 118:
-			pos.Board[119], pos.Board[117] = Empty, BlackRook
-		case 114:
-			pos.Board[112], pos.Board[115] = Empty, BlackRook
+			pos.movePiece(0, 3)
+		case 62:
+			pos.movePiece(63, 61)
+		case 58:
+			pos.movePiece(56, 59)
 		}
 	}
+
 	switch piece {
-	case WhiteKing:
-		pos.CastlingRights &^= WhiteKingside | WhiteQueenside
-	case BlackKing:
-		pos.CastlingRights &^= BlackKingside | BlackQueenside
-	case WhiteRook:
+	case King:
+		if colour == White {
+			pos.CastlingRights &^= WhiteKingSide | WhiteQueenSide
+		} else {
+			pos.CastlingRights &^= BlackKingSide | BlackQueenSide
+		}
+	case Rook:
 		switch move.From {
 		case 0:
-			pos.CastlingRights &^= WhiteQueenside
+			pos.CastlingRights &^= WhiteQueenSide
 		case 7:
-			pos.CastlingRights &^= WhiteKingside
-		}
-	case BlackRook:
-		switch move.From {
-		case 112:
-			pos.CastlingRights &^= BlackQueenside
-		case 119:
-			pos.CastlingRights &^= BlackKingside
+			pos.CastlingRights &^= WhiteKingSide
+		case 56:
+			pos.CastlingRights &^= BlackQueenSide
+		case 63:
+			pos.CastlingRights &^= BlackKingSide
 		}
 	}
+
 	switch undo.CapturedPiece {
-	case WhiteRook:
-		switch move.To {
+	case Rook:
+		switch undo.CapturedSquare {
 		case 0:
-			pos.CastlingRights &^= WhiteQueenside
+			pos.CastlingRights &^= WhiteQueenSide
 		case 7:
-			pos.CastlingRights &^= WhiteKingside
-		}
-	case BlackRook:
-		switch move.To {
-		case 112:
-			pos.CastlingRights &^= BlackQueenside
-		case 119:
-			pos.CastlingRights &^= BlackKingside
+			pos.CastlingRights &^= WhiteKingSide
+		case 56:
+			pos.CastlingRights &^= BlackQueenSide
+		case 63:
+			pos.CastlingRights &^= BlackKingSide
 		}
 	}
-	if undo.CapturedPiece != Empty {
-		pos.HalfmoveClock = 0
-	} else if piece == WhitePawn || piece == BlackPawn {
+
+	if piece == Pawn || undo.CapturedPiece != Empty {
 		pos.HalfmoveClock = 0
 	} else {
 		pos.HalfmoveClock++
 	}
 
-	if pos.SideToMove < 0 {
+	if pos.SideToMove == Black {
 		pos.FullmoveNumber++
 	}
-
-	pos.SideToMove = -pos.SideToMove
-	return undo
-}
-
-func MakeNullMove(pos *Position) NullUndo {
-	undo := NullUndo{
-		SideToMove:      pos.SideToMove,
-		EnPassantSquare: pos.EnPassantSquare,
-		HalfmoveClock:   pos.HalfmoveClock,
-		FullmoveNumber:  pos.FullmoveNumber,
-	}
-
-	if pos.SideToMove < 0 {
-		pos.FullmoveNumber++
-	}
-
-	pos.SideToMove = -pos.SideToMove
-	pos.EnPassantSquare = -1
-	pos.HalfmoveClock++
+	pos.SideToMove ^= 1
 
 	return undo
-}
-
-func UnmakeNullMove(pos *Position, undo NullUndo) {
-	pos.SideToMove = undo.SideToMove
-	pos.EnPassantSquare = undo.EnPassantSquare
-	pos.HalfmoveClock = undo.HalfmoveClock
-	pos.FullmoveNumber = undo.FullmoveNumber
 }
 
 func UnmakeMove(pos *Position, undo Undo) {
 	move := undo.Move
-
-	piece := pos.Board[move.To]
-	if move.Promotion != 0 {
-		if piece > 0 {
-			piece = WhitePawn
-		} else {
-			piece = BlackPawn
-		}
-	}
-	pos.Board[move.From] = piece
-	pos.Board[move.To] = undo.CapturedPiece
-	pos.EnPassantSquare = undo.EnPassantSquare
+	pos.SideToMove ^= 1
 	pos.CastlingRights = undo.CastlingRights
+	pos.EnPassantTarget = undo.EnPassantTarget
 	pos.HalfmoveClock = undo.HalfmoveClock
 	pos.FullmoveNumber = undo.FullmoveNumber
 	pos.WhiteKingSquare = undo.WhiteKingSquare
 	pos.BlackKingSquare = undo.BlackKingSquare
 
+	movingPiece := pos.Mailbox[move.To]
+	if isPromotion(move) {
+		movingPiece = Pawn
+	}
+	pos.removePiece(move.To)
+	pos.addPiece(move.From, pos.SideToMove, movingPiece)
+
 	if move.isEnPassant {
-		pos.Board[move.To] = Empty
-
-		capturedSquare := move.To
-		if piece > 0 {
-			capturedSquare -= S
-		} else {
-			capturedSquare -= N
-		}
-
-		pos.Board[capturedSquare] = undo.CapturedPiece
+		pos.addPiece(undo.CapturedSquare, pos.SideToMove^1, undo.CapturedPiece)
+	} else if undo.CapturedPiece != Empty {
+		pos.addPiece(move.To, pos.SideToMove^1, undo.CapturedPiece)
 	}
 
 	if move.isCastling {
 		switch move.To {
 		case 6:
-			pos.Board[7], pos.Board[5] = WhiteRook, Empty
+			pos.movePiece(5, 7)
 		case 2:
-			pos.Board[0], pos.Board[3] = WhiteRook, Empty
-		case 118:
-			pos.Board[119], pos.Board[117] = BlackRook, Empty
-		case 114:
-			pos.Board[112], pos.Board[115] = BlackRook, Empty
+			pos.movePiece(3, 0)
+		case 62:
+			pos.movePiece(61, 63)
+		case 58:
+			pos.movePiece(59, 56)
 		}
 	}
-	pos.SideToMove = -pos.SideToMove
 }
 
-const (
-	N  = -16
-	S  = 16
-	E  = 1
-	W  = -1
-	NE = -15
-	NW = -17
-	SE = 17
-	SW = 15
-)
+func MakeNullMove(pos *Position) NullUndo {
+	undo := NullUndo{
+		SideToMove:      pos.SideToMove,
+		EnPassantTarget: pos.EnPassantTarget,
+		HalfmoveClock:   pos.HalfmoveClock,
+		FullmoveNumber:  pos.FullmoveNumber,
+	}
+	if pos.SideToMove == Black {
+		pos.FullmoveNumber++
+	}
+	pos.SideToMove ^= 1
+	pos.EnPassantTarget = -1
+	pos.HalfmoveClock++
+	return undo
+}
+
+func UnmakeNullMove(pos *Position, undo NullUndo) {
+	pos.SideToMove = undo.SideToMove
+	pos.EnPassantTarget = undo.EnPassantTarget
+	pos.HalfmoveClock = undo.HalfmoveClock
+	pos.FullmoveNumber = undo.FullmoveNumber
+}

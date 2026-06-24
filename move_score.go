@@ -5,22 +5,28 @@ const killerMoveBonus = 900000
 const maxHistoryValue = 8192
 const historyScoreDivisor = 96
 
+var moveOrderingPieceValues = [6]int{100, 300, 325, 500, 900, 0}
+
+func PieceValue(piece uint8) int {
+	if piece >= uint8(len(moveOrderingPieceValues)) {
+		return 0
+	}
+	return moveOrderingPieceValues[piece]
+}
+
 func ScoreMove(pos *Position, move Move) int {
 	score := 0
-	target := pos.Board[move.To]
+	target := pos.PieceAt(move.To)
 	if move.isEnPassant {
-		target = BlackPawn
-		if pos.Board[move.From] < 0 {
-			target = WhitePawn
-		}
+		target = Pawn
 	}
 	if target != Empty {
-		victim := PieceValue(PieceType(target))
-		attacker := PieceType(pos.Board[move.From])
+		victim := PieceValue(target)
+		attacker := pos.PieceAt(move.From)
 		score += victim + (7 - int(attacker))
 	}
-	if move.Promotion != 0 {
-		score += PieceValue(PieceType(move.Promotion))
+	if isPromotion(move) {
+		score += PieceValue(move.Promotion)
 	}
 
 	return score
@@ -28,7 +34,7 @@ func ScoreMove(pos *Position, move Move) int {
 
 func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int, scores []int) {
 	side := 0
-	if pos.SideToMove < 0 {
+	if pos.SideToMove == Black {
 		side = 1
 	}
 
@@ -49,20 +55,17 @@ func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, k
 
 func qScoreMove(pos *Position, move Move) int {
 	score := 0
-	target := pos.Board[move.To]
+	target := pos.PieceAt(move.To)
 	if move.isEnPassant {
-		target = BlackPawn
-		if pos.Board[move.From] < 0 {
-			target = WhitePawn
-		}
+		target = Pawn
 	}
 	if target != Empty {
-		victim := PieceValue(PieceType(target))
-		attacker := PieceType(pos.Board[move.From])
+		victim := PieceValue(target)
+		attacker := pos.PieceAt(move.From)
 		score += victim + (7 - int(attacker))
 	}
-	if move.Promotion != 0 {
-		score += PieceValue(PieceType(move.Promotion))
+	if isPromotion(move) {
+		score += PieceValue(move.Promotion)
 	}
 	return score
 }

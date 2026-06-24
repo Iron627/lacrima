@@ -3,10 +3,10 @@ package lacrima
 type RepetitionHistory map[uint64]int
 
 var (
-	zobristPieces    [13][128]uint64
+	zobristPieces    [2][6][64]uint64
 	zobristSide      uint64
 	zobristCastling  [16]uint64
-	zobristEnPassant [8]uint64
+	zobristEnPassant [64]uint64
 )
 
 func init() {
@@ -20,9 +20,11 @@ func init() {
 		return z ^ (z >> 31)
 	}
 
-	for piece := range zobristPieces {
-		for square := range zobristPieces[piece] {
-			zobristPieces[piece][square] = next()
+	for colour := range zobristPieces {
+		for piece := range zobristPieces[colour] {
+			for square := range zobristPieces[colour][piece] {
+				zobristPieces[colour][piece][square] = next()
+			}
 		}
 	}
 
@@ -40,30 +42,27 @@ func init() {
 func positionKey(pos *Position) uint64 {
 	var key uint64
 
-	for square, piece := range pos.Board {
-		if IsOffBoard(square) || piece == Empty {
-			continue
+	for colour := 0; colour < 2; colour++ {
+		for piece := 0; piece < 6; piece++ {
+			pieces := pos.Board.GetPieceBoard(uint8(colour), uint8(piece))
+			for pieces != 0 {
+				square := popLSB(&pieces)
+				key ^= zobristPieces[colour][piece][square]
+			}
 		}
-
-		key ^= zobristPieces[pieceZobristIndex(piece)][square]
 	}
 
-	if pos.SideToMove < 0 {
+	if pos.SideToMove == Black {
 		key ^= zobristSide
 	}
 
 	key ^= zobristCastling[pos.CastlingRights&0x0f]
 
-	if pos.EnPassantSquare != -1 {
-		file := int(pos.EnPassantSquare) & 7
-		key ^= zobristEnPassant[file]
+	if pos.EnPassantTarget != -1 {
+		key ^= zobristEnPassant[pos.EnPassantTarget]
 	}
 
 	return key
-}
-
-func pieceZobristIndex(piece int8) int {
-	return int(piece + 6)
 }
 
 func cloneRepetitionHistory(history RepetitionHistory) RepetitionHistory {

@@ -14,14 +14,12 @@ func PositionFromFEN(fen string) (Position, error) {
 	}
 
 	var pos Position
-	pos.WhiteKingSquare = -1
-	pos.BlackKingSquare = -1
+	pos.WhiteKingSquare = Empty
+	pos.BlackKingSquare = Empty
+	pos.EnPassantTarget = -1
 
-	for i := range pos.Board {
-		if IsOffBoard(i) {
-			continue
-		}
-		pos.Board[i] = Empty
+	for i := range pos.Mailbox {
+		pos.Mailbox[i] = Empty
 	}
 
 	ranks := strings.Split(fields[0], "/")
@@ -46,34 +44,34 @@ func PositionFromFEN(fen string) (Position, error) {
 				return Position{}, errors.New("invalid fen")
 			}
 
-			square := rank*16 + file
+			square := uint8(rank*8 + file)
 
 			switch ch {
 			case 'P':
-				pos.Board[square] = WhitePawn
+				pos.addPiece(square, White, Pawn)
 			case 'N':
-				pos.Board[square] = WhiteKnight
+				pos.addPiece(square, White, Knight)
 			case 'B':
-				pos.Board[square] = WhiteBishop
+				pos.addPiece(square, White, Bishop)
 			case 'R':
-				pos.Board[square] = WhiteRook
+				pos.addPiece(square, White, Rook)
 			case 'Q':
-				pos.Board[square] = WhiteQueen
+				pos.addPiece(square, White, Queen)
 			case 'K':
-				pos.Board[square] = WhiteKing
+				pos.addPiece(square, White, King)
 				pos.WhiteKingSquare = square
 			case 'p':
-				pos.Board[square] = BlackPawn
+				pos.addPiece(square, Black, Pawn)
 			case 'n':
-				pos.Board[square] = BlackKnight
+				pos.addPiece(square, Black, Knight)
 			case 'b':
-				pos.Board[square] = BlackBishop
+				pos.addPiece(square, Black, Bishop)
 			case 'r':
-				pos.Board[square] = BlackRook
+				pos.addPiece(square, Black, Rook)
 			case 'q':
-				pos.Board[square] = BlackQueen
+				pos.addPiece(square, Black, Queen)
 			case 'k':
-				pos.Board[square] = BlackKing
+				pos.addPiece(square, Black, King)
 				pos.BlackKingSquare = square
 			default:
 				return Position{}, errors.New("invalid fen")
@@ -89,9 +87,9 @@ func PositionFromFEN(fen string) (Position, error) {
 
 	switch fields[1] {
 	case "w":
-		pos.SideToMove = 1
+		pos.SideToMove = White
 	case "b":
-		pos.SideToMove = -1
+		pos.SideToMove = Black
 	default:
 		return Position{}, errors.New("invalid fen")
 	}
@@ -108,13 +106,13 @@ func PositionFromFEN(fen string) (Position, error) {
 
 			switch ch {
 			case 'K':
-				pos.CastlingRights |= WhiteKingside
+				pos.CastlingRights |= WhiteKingSide
 			case 'Q':
-				pos.CastlingRights |= WhiteQueenside
+				pos.CastlingRights |= WhiteQueenSide
 			case 'k':
-				pos.CastlingRights |= BlackKingside
+				pos.CastlingRights |= BlackKingSide
 			case 'q':
-				pos.CastlingRights |= BlackQueenside
+				pos.CastlingRights |= BlackQueenSide
 			default:
 				return Position{}, errors.New("invalid fen")
 			}
@@ -122,26 +120,26 @@ func PositionFromFEN(fen string) (Position, error) {
 	}
 
 	if fields[3] == "-" {
-		pos.EnPassantSquare = -1
+		pos.EnPassantTarget = -1
 	} else {
 		square, ok := squareFromString(fields[3])
 		if !ok {
 			return Position{}, errors.New("invalid fen")
 		}
-		rank := square >> 4
+		rank := square / 8
 		if rank != 2 && rank != 5 {
 			return Position{}, errors.New("invalid fen")
 		}
-		pos.EnPassantSquare = int8(square)
+		pos.EnPassantTarget = int8(square)
 	}
 
 	pos.FullmoveNumber = 1
 	if len(fields) >= 5 {
 		halfmoveClock, err := strconv.Atoi(fields[4])
-		if err != nil || halfmoveClock < 0 {
+		if err != nil || halfmoveClock < 0 || halfmoveClock > 255 {
 			return Position{}, errors.New("invalid fen")
 		}
-		pos.HalfmoveClock = halfmoveClock
+		pos.HalfmoveClock = uint8(halfmoveClock)
 	}
 
 	if len(fields) >= 6 {
