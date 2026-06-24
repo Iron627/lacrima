@@ -80,7 +80,10 @@ func (pos *Position) ColourAt(square uint8) uint8 {
 	if pos.Board.Colours[White]&mask != 0 {
 		return White
 	}
-	return Black
+	if pos.Board.Colours[Black]&mask != 0 {
+		return Black
+	}
+	return Empty
 }
 func (pos *Position) addPiece(sq uint8, colour uint8, piece uint8) {
 	var bb Bitboard = 1 << sq

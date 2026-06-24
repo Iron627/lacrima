@@ -256,7 +256,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	}
 }
 
-func parseGo(fields []string, stm int8) (int, int) {
+func parseGo(fields []string, stm uint8) (int, int) {
 	depth := 5
 
 	var wtime, btime, winc, binc int
@@ -318,7 +318,7 @@ func parseGo(fields []string, stm int8) (int, int) {
 		timeLeft := btime
 		inc := binc
 
-		if stm > 0 {
+		if stm == White {
 			timeLeft = wtime
 			inc = winc
 		}
@@ -486,15 +486,15 @@ func MoveToUCI(move Move) string {
 
 	s := squareToString(move.From) + squareToString(move.To)
 
-	if move.Promotion != 0 {
+	if isPromotion(move) {
 		switch move.Promotion {
-		case WhiteKnight:
+		case Knight:
 			s += "n"
-		case WhiteBishop:
+		case Bishop:
 			s += "b"
-		case WhiteRook:
+		case Rook:
 			s += "r"
-		case WhiteQueen:
+		case Queen:
 			s += "q"
 		}
 	}
@@ -514,14 +514,14 @@ func MoveFromUCI(pos *Position, s string) (Move, bool) {
 	return Move{}, false
 }
 
-func squareToString(square int) string {
+func squareToString(square uint8) string {
 	file := square & 7
-	rank := square >> 4
+	rank := square / 8
 
 	return string(rune('a'+file)) + string(rune('1'+rank))
 }
 
-func squareFromString(s string) (int, bool) {
+func squareFromString(s string) (uint8, bool) {
 	if len(s) != 2 {
 		return 0, false
 	}
@@ -529,8 +529,8 @@ func squareFromString(s string) (int, bool) {
 		return 0, false
 	}
 
-	file := int(s[0] - 'a')
-	rank := int(s[1] - '1')
+	file := uint8(s[0] - 'a')
+	rank := uint8(s[1] - '1')
 
-	return rank*16 + file, true
+	return rank*8 + file, true
 }
