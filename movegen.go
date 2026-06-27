@@ -437,32 +437,33 @@ func generateCastlingMoves(pos *Position, moves []Move, from int) []Move {
 	return moves
 }
 
-func IsSquareAttacked(pos *Position, square int, byColour uint8) bool {
-	if square < 0 || square >= 64 {
+func IsSquareAttacked(pos *Position, sq int, byColour uint8) bool {
+	if sq < 0 || sq >= 64 {
 		return false
 	}
 
-	target := bit(square)
-	pawns := pos.Board.GetPieceBoard(byColour, Pawn)
-	for pawns != 0 {
-		from := popLSB(&pawns)
-		if pawnAttacks[byColour][from]&target != 0 {
-			return true
-		}
-	}
-
-	if knightAttacks[square]&pos.Board.GetPieceBoard(byColour, Knight) != 0 {
-		return true
-	}
-	if kingAttacks[square]&pos.Board.GetPieceBoard(byColour, King) != 0 {
-		return true
-	}
+	enemyPawns := pos.Board.GetPieceBoard(byColour, Pawn)
+	enemyKnights := pos.Board.GetPieceBoard(byColour, Knight)
+	enemyBishops := pos.Board.GetPieceBoard(byColour, Bishop)
+	enemyRooks := pos.Board.GetPieceBoard(byColour, Rook)
+	enemyQueens := pos.Board.GetPieceBoard(byColour, Queen)
+	enemyKing := pos.Board.GetPieceBoard(byColour, King)
 
 	all := occupied(pos)
-	if bishopAttacks(square, all)&(pos.Board.GetPieceBoard(byColour, Bishop)|pos.Board.GetPieceBoard(byColour, Queen)) != 0 {
+
+	if pawnAttacks[byColour^1][sq]&enemyPawns != 0 {
 		return true
 	}
-	if rookAttacks(square, all)&(pos.Board.GetPieceBoard(byColour, Rook)|pos.Board.GetPieceBoard(byColour, Queen)) != 0 {
+	if knightAttacks[sq]&enemyKnights != 0 {
+		return true
+	}
+	if kingAttacks[sq]&enemyKing != 0 {
+		return true
+	}
+	if bishopAttacks(sq, all)&(enemyBishops|enemyQueens) != 0 {
+		return true
+	}
+	if rookAttacks(sq, all)&(enemyRooks|enemyQueens) != 0 {
 		return true
 	}
 
