@@ -1,7 +1,10 @@
 package lacrima
 
 const preferredMoveBonus = 1000000
-const killerMoveBonus = 900000
+const goodCaptureBonus = 800000
+const promotionBonus = 700000
+const killerMoveBonus = 600000
+const badCapturePenalty = -800000
 const maxHistoryValue = 8192
 const historyScoreDivisor = 96
 
@@ -15,21 +18,30 @@ func PieceValue(piece uint8) int {
 }
 
 func ScoreMove(pos *Position, move Move) int {
-	score := 0
 	target := pos.PieceAt(move.To)
 	if move.isEnPassant {
 		target = Pawn
 	}
+
 	if target != Empty {
-		victim := PieceValue(target)
 		attacker := pos.PieceAt(move.From)
-		score += victim + (7 - int(attacker))
-	}
-	if isPromotion(move) {
-		score += PieceValue(move.Promotion)
+		see := StaticExchangeEvaluation(pos, move)
+
+		if see >= 0 {
+			return goodCaptureBonus +
+				PieceValue(target)*10 -
+				PieceValue(attacker) +
+				see
+		}
+
+		return badCapturePenalty + see
 	}
 
-	return score
+	if isPromotion(move) {
+		return promotionBonus + PieceValue(move.Promotion)
+	}
+
+	return 0
 }
 
 func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int, scores []int) {
@@ -40,34 +52,45 @@ func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, k
 
 	for i, move := range moves {
 		score := ScoreMove(pos, move)
-		quiet := isQuietMove(pos, move)
+
 		if move == preferredMove {
 			score += preferredMoveBonus
-		} else if move == killerA || move == killerB {
-			score += killerMoveBonus
-		}
-		if quiet {
+		} else if isQuietMove(pos, move) {
+			if move == killerA || move == killerB {
+				score += killerMoveBonus
+			}
 			score += historyTable[side][move.From][move.To] / historyScoreDivisor
 		}
+
 		scores[i] = score
 	}
 }
 
 func qScoreMove(pos *Position, move Move) int {
-	score := 0
 	target := pos.PieceAt(move.To)
 	if move.isEnPassant {
 		target = Pawn
 	}
+
 	if target != Empty {
-		victim := PieceValue(target)
 		attacker := pos.PieceAt(move.From)
-		score += victim + (7 - int(attacker))
+		see := StaticExchangeEvaluation(pos, move)
+
+		if see >= 0 {
+			return goodCaptureBonus +
+				PieceValue(target)*10 -
+				PieceValue(attacker) +
+				see
+		}
+
+		return badCapturePenalty + see
 	}
+
 	if isPromotion(move) {
-		score += PieceValue(move.Promotion)
+		return promotionBonus + PieceValue(move.Promotion)
 	}
-	return score
+
+	return 0
 }
 
 func qScoreMoves(pos *Position, moves []Move, preferredMove Move, scores []int) {
@@ -76,7 +99,6 @@ func qScoreMoves(pos *Position, moves []Move, preferredMove Move, scores []int) 
 		if move == preferredMove {
 			score += preferredMoveBonus
 		}
-
 		scores[i] = score
 	}
 }
