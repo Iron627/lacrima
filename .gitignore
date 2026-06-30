@@ -4,3 +4,5 @@ cmd/lacrima/lacrima*
 *.test
 tuner
 *.test.exe
+lacrima
+lacrima.exe

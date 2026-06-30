@@ -529,10 +529,12 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 	qScoreMoves(pos, moves, ttMove, scores)
 
 	bestMove := Move{}
+	bestScore := alpha
 	searchedMoves := 0
 
 	for pseudoMoveIndex := range moves {
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
+
 		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
 		if !legal {
 			continue
@@ -541,6 +543,9 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 
 		score := quiesce(search, pos, -beta, -alpha, ply+1)
 		score = -score
+		if score > bestScore {
+			bestScore = score
+		}
 
 		UnmakeMove(pos, undo)
 
@@ -556,6 +561,9 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 		if score > alpha {
 			alpha = score
 			bestMove = move
+		}
+		if bestScore > mated && searchedMoves > 2 {
+			break
 		}
 	}
 
