@@ -27,6 +27,17 @@ type SearchInfo struct {
 	Nodes      uint64
 	TimeMillis int64
 	BestMove   Move
+	PV         []Move
+}
+
+func (info SearchInfo) NPS() uint64 {
+	if info.Nodes == 0 {
+		return 0
+	}
+	if info.TimeMillis <= 0 {
+		return info.Nodes * 1000
+	}
+	return info.Nodes * 1000 / uint64(info.TimeMillis)
 }
 
 type SearchInfoFunc func(SearchInfo)
@@ -38,6 +49,8 @@ type searchContext struct {
 	tt           *TranspositionTable
 	historyTable *[2][128][128]int
 	killers      [maxSearchPly][2]Move
+	pvTable      [maxSearchPly][maxSearchPly]Move
+	pvLength     [maxSearchPly]int
 	nodes        uint64
 	ok           bool
 }
@@ -138,6 +151,10 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	isRoot := rootBestMove != nil
 	sideToMove := pos.SideToMove
 
+	if pvNode && ply >= 0 && ply < maxSearchPly {
+		search.pvLength[ply] = ply
+	}
+
 	if searchContextStopped(search) {
 		search.ok = false
 		return 0
@@ -164,7 +181,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	if entry, ok := search.tt.Probe(key); ok {
 		ttMove = entry.Move
 		ttScore := scoreFromTT(entry.Score, ply)
-		if !isRoot && entry.Depth >= depth {
+		if !isRoot && !pvNode && entry.Depth >= depth {
 			switch entry.Flag {
 			case TTExact:
 				return ttScore
@@ -317,6 +334,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		}
 
 		if score > alpha {
+			if pvNode {
+				updatePV(search, ply, move)
+			}
 			alpha = score
 		}
 	}
@@ -335,6 +355,23 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	search.tt.Store(key, depth, scoreToTT(bestScore, ply), flag, bestMove)
 
 	return bestScore
+}
+
+func updatePV(search *searchContext, ply int, move Move) {
+	if ply < 0 || ply >= maxSearchPly {
+		return
+	}
+
+	search.pvTable[ply][ply] = move
+	nextLength := ply + 1
+	if ply+1 < maxSearchPly && search.pvLength[ply+1] > nextLength {
+		nextLength = search.pvLength[ply+1]
+	}
+
+	for nextPly := ply + 1; nextPly < nextLength; nextPly++ {
+		search.pvTable[ply][nextPly] = search.pvTable[ply+1][nextPly]
+	}
+	search.pvLength[ply] = nextLength
 }
 
 func hasNonPawnMaterial(pos *Position) bool {
@@ -391,6 +428,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 
 		var move Move
 		var score int
+		var pv []Move
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
@@ -420,6 +458,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 				continue
 			}
 
+			pv = searchPV(search)
 			break
 		}
 
@@ -433,6 +472,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 				Nodes:      totalNodes,
 				TimeMillis: stdtime.Since(startTime).Milliseconds(),
 				BestMove:   bestMove,
+				PV:         pv,
 			})
 		}
 
@@ -442,6 +482,21 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	}
 
 	return bestMove
+}
+
+func searchPV(search *searchContext) []Move {
+	if search == nil || search.pvLength[0] <= 0 {
+		return nil
+	}
+
+	length := search.pvLength[0]
+	if length > maxSearchPly {
+		length = maxSearchPly
+	}
+
+	pv := make([]Move, length)
+	copy(pv, search.pvTable[0][:length])
+	return pv
 }
 
 func firstLegalMove(pos *Position, moves []Move) (Move, bool) {
