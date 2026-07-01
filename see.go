@@ -37,7 +37,7 @@ func StaticExchangeEvaluation(pos *Position, move Move) int {
 	}
 
 	pieceOnTarget := movingPiece
-	if move.Promotion != Empty {
+	if isPromotion(move) {
 		pieceOnTarget = move.Promotion
 	}
 
