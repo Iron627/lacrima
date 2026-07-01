@@ -261,6 +261,10 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		moveIndex := searchedMoves
 		searchedMoves++
 
+		if pvNode && ply+1 < maxSearchPly {
+			search.pvLength[ply+1] = ply + 1
+		}
+
 		if !isRoot && quiet && quietsTriedCount < len(quietsTried) {
 			quietsTried[quietsTriedCount] = move
 			quietsTriedCount++
