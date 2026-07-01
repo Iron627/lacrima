@@ -221,13 +221,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 						return
 					}
 
-					writeLine(
-						"info depth", info.Depth,
-						"score cp", info.Score,
-						"nodes", info.Nodes,
-						"time", info.TimeMillis,
-						"pv", MoveToUCI(info.BestMove),
-					)
+					writeLine(formatUCIInfo(info))
 				}, tt, &historyTable)
 
 				if searchID.Load() != id {
@@ -254,6 +248,41 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(errOutput, err)
 	}
+}
+
+func formatUCIInfo(info SearchInfo) string {
+	return strings.Join([]string{
+		"info",
+		"depth", strconv.Itoa(info.Depth),
+		formatUCIScore(info.Score),
+		"nodes", strconv.FormatUint(info.Nodes, 10),
+		"nps", strconv.FormatUint(info.NPS(), 10),
+		"time", strconv.FormatInt(info.TimeMillis, 10),
+		"pv", formatUCIPV(info),
+	}, " ")
+}
+
+func formatUCIScore(score int) string {
+	if score > mateScore-maxSearchPly {
+		return "score mate " + strconv.Itoa((mateScore-score+1)/2)
+	}
+	if score < -mateScore+maxSearchPly {
+		return "score mate " + strconv.Itoa(-(mateScore+score+1)/2)
+	}
+	return "score cp " + strconv.Itoa(score)
+}
+
+func formatUCIPV(info SearchInfo) string {
+	pv := info.PV
+	if len(pv) == 0 && info.BestMove != (Move{}) {
+		pv = []Move{info.BestMove}
+	}
+
+	moves := make([]string, 0, len(pv))
+	for _, move := range pv {
+		moves = append(moves, MoveToUCI(move))
+	}
+	return strings.Join(moves, " ")
 }
 
 func parseGo(fields []string, stm uint8) (int, int) {
