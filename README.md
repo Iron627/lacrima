@@ -15,7 +15,7 @@ DONE:
   - position/go/stop/quit/setoption/ucinewgame/isready/uci
   - perft testing for correctness
   - time management and search cancellation
-  - texel-tuned eval using PESTO tapered eval with material + piece-square tables as a starting point
+  - texel-tuned eval using PESTO tapered eval with material + piece-square tables as a starting point + passed pawns + bishop pairs
   - negamax with a/b pruning
   - iterative deepening
   - aspiration windows
@@ -25,12 +25,12 @@ DONE:
   - null-move pruning
   - repetition detection
   - mate score handling
-  - move ordering with TT move, MVV/LVA, promos, killers, and history
+  - move ordering with TT move, MVV/LVA, promos, killers, history, and static exchange evaluation
   - principal variation search
   - late move reduction
   - reverse futility pruning
   - futility pruning
-
+  - late move pruning in quiescence
 ## special thanks to:
 - members of EP and SF discord (cie, matt, seba, jeremy(funny), nano, andrew, kama, lily, chef, dr. extension, jw)
 
