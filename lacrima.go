@@ -151,7 +151,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 		switch fields[0] {
 
 		case "uci":
-			writeLine("id name Lacrima v1.1")
+			writeLine("id name Lacrima v1.1.1")
 			writeLine("id author Iron")
 			writeLine("option name Hash type spin default", defaultHashMB, "min", minHashMB, "max", maxHashMB)
 			writeLine("option name Threads type spin default 1 min 1 max 1")
