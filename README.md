@@ -32,6 +32,6 @@ DONE:
   - futility pruning
   - late move pruning in quiescence
 ## special thanks to:
-- members of EP and SF discord (cie, matt, seba, jeremy(funny), nano, andrew, kama, lily, chef, dr. extension, jw)
+- members of EP and SF discord (cie, matt, seba, jeremy(funny), nano, andrew, kama, lily, chef, dr. extension, jw, Ellie (she ruined my test)) 
 
 GOAL: 3000 ELO
