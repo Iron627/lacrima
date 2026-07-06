@@ -11,6 +11,8 @@ const (
 	aspirationWindow  = 50
 	fpMarginOffset    = 250
 	fpMarginMult      = 60
+	lmpOffset         = 5
+	lmpMult           = 2
 )
 const (
 	maxSearchPly             = 128
@@ -252,6 +254,9 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		quiet := isQuietMove(pos, move)
 		if eval+fpMarginOffset+fpMarginMult*depth <= alpha && !inCheck && !tactical && bestScore > mated && depth <= 5 {
 			continue
+		}
+		if searchedMoves >= lmpOffset+depth*depth*lmpMult && !inCheck && !tactical && bestScore > mated {
+			break
 		}
 		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
 		if !legal {
