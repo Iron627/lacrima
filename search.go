@@ -417,12 +417,15 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	if depth < 1 {
 		depth = 1
 	}
-
+	var currentNodes uint64
+	var prevNodes uint64
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
 		alpha := -mateScore
 		beta := mateScore
 		deltaA := aspirationWindow
 		deltaB := aspirationWindow
+		prevNodes = currentNodes
+		currentNodes = 0
 		if currentDepth > 1 {
 			alpha = previousScore - aspirationWindow
 			if alpha < -mateScore {
@@ -444,6 +447,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			move = bestMove
 			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true)
 			totalNodes += search.nodes
+			currentNodes += search.nodes
 
 			if !search.ok {
 				return bestMove
@@ -486,8 +490,15 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			})
 		}
 
-		if time > 0 && stdtime.Since(startTime) >= stdtime.Duration(time)*stdtime.Millisecond*3/5 {
-			break
+		if time > 0 {
+			elapsed := int64(stdtime.Since(startTime).Milliseconds())
+			if prevNodes > 0 {
+
+				target := float64(time) * float64(prevNodes) / float64(currentNodes)
+				if elapsed >= int64(target) {
+					break
+				}
+			}
 		}
 
 		if searchStopped(ctx, deadline) {
