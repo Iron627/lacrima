@@ -359,9 +359,6 @@ func parseGo(fields []string, stm uint8) (int, int) {
 
 			moveTime = int(float64(timeLeft)/30.0 + float64(inc)/1.1)
 
-			if moveTime < 50 {
-				moveTime = 50
-			}
 		}
 	}
 

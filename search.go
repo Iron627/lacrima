@@ -438,6 +438,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		var move Move
 		var score int
 		var pv []Move
+
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
@@ -483,6 +484,10 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 				BestMove:   bestMove,
 				PV:         pv,
 			})
+		}
+
+		if time > 0 && stdtime.Since(startTime) >= stdtime.Duration(time)*stdtime.Millisecond*3/5 {
+			break
 		}
 
 		if searchStopped(ctx, deadline) {
