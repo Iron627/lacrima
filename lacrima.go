@@ -96,7 +96,7 @@ func RunBench(output io.Writer) {
 		tt.Clear()
 		searchBestMove(context.Background(), &pos, benchDepth, 0, nil, func(info SearchInfo) {
 			searchedNodes = info.Nodes
-		}, tt, &historyTable)
+		}, tt, &historyTable, 0)
 		nodes += searchedNodes
 	}
 	elapsed := time.Since(start)
@@ -211,7 +211,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			searchPos := pos
 			searchHistory := cloneRepetitionHistory(history)
 
-			depth, moveTime := parseGo(fields, searchPos.SideToMove)
+			depth, moveTime, increment := parseGo(fields, searchPos.SideToMove)
 
 			go func() {
 				defer close(done)
@@ -222,7 +222,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 					}
 
 					writeLine(formatUCIInfo(info))
-				}, tt, &historyTable)
+				}, tt, &historyTable, increment)
 
 				if searchID.Load() != id {
 					return
@@ -285,11 +285,12 @@ func formatUCIPV(info SearchInfo) string {
 	return strings.Join(moves, " ")
 }
 
-func parseGo(fields []string, stm uint8) (int, int) {
+func parseGo(fields []string, stm uint8) (int, int, int) {
 	depth := 5
 
 	var wtime, btime, winc, binc int
 	var moveTime int
+	var inc int
 	infinite := false
 	hasExplicitDepth := false
 
@@ -345,7 +346,7 @@ func parseGo(fields []string, stm uint8) (int, int) {
 
 	if moveTime == 0 && !infinite {
 		timeLeft := btime
-		inc := binc
+		inc = binc
 
 		if stm == White {
 			timeLeft = wtime
@@ -357,12 +358,12 @@ func parseGo(fields []string, stm uint8) (int, int) {
 				depth = infiniteDepth
 			}
 
-			moveTime = int(float64(timeLeft)/30.0 + float64(inc)/1.1)
+			moveTime = timeLeft
 
 		}
 	}
 
-	return depth, moveTime
+	return depth, moveTime, inc
 }
 
 func parseHashOption(fields []string) (int, bool) {
