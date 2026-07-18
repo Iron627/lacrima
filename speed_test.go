@@ -70,7 +70,7 @@ func BenchmarkSearchDepth(b *testing.B) {
 
 				benchMoveSink = searchBestMove(context.Background(), &pos, tc.depth, 0, nil, func(info SearchInfo) {
 					searchedNodes = info.Nodes
-				}, tt, &historyTable)
+				}, tt, &historyTable, 0)
 				totalNodes += searchedNodes
 			}
 

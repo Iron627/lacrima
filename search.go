@@ -387,7 +387,7 @@ func hasNonPawnMaterial(pos *Position) bool {
 	return pos.Board.Colours[pos.SideToMove]&^(pos.Board.Pieces[Pawn]|pos.Board.Pieces[King]) != 0
 }
 
-func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int) Move {
+func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int, increment int) Move {
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
 
@@ -417,7 +417,6 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	if depth < 1 {
 		depth = 1
 	}
-
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
 		alpha := -mateScore
 		beta := mateScore
@@ -438,6 +437,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		var move Move
 		var score int
 		var pv []Move
+
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
@@ -483,6 +483,20 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 				BestMove:   bestMove,
 				PV:         pv,
 			})
+		}
+
+		if time > 0 {
+			elapsed := int64(stdtime.Since(startTime).Milliseconds())
+			hardbound := clampMax(int64(time/2)+int64(float64(increment)/1.1), int64(time))
+			softbound := clampMax(int64(time*3/100)+int64(float64(increment)/1.1), int64(hardbound))
+
+			if elapsed >= softbound {
+				break
+			}
+
+			if elapsed >= hardbound {
+				break
+			}
 		}
 
 		if searchStopped(ctx, deadline) {
@@ -675,4 +689,16 @@ func storeKiller(killers *[maxSearchPly][2]Move, ply int, move Move) {
 	}
 	killers[ply][1] = killers[ply][0]
 	killers[ply][0] = move
+}
+func clampMin(a int64, min int64) int64 {
+	if a < min {
+		return min
+	}
+	return a
+}
+func clampMax(a int64, max int64) int64 {
+	if a > max {
+		return max
+	}
+	return a
 }
