@@ -397,7 +397,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 
 	var deadline stdtime.Time
 	if time > 0 {
-		deadline = stdtime.Now().Add(stdtime.Duration(time) * stdtime.Millisecond)
+		deadline = stdtime.Now().Add(stdtime.Duration(clampMax(int64(time/2+int(float64(increment)/1.1)), int64(time))) * stdtime.Millisecond)
 	}
 
 	var pseudoBuf [256]Move
@@ -417,11 +417,28 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	if depth < 1 {
 		depth = 1
 	}
+
+	var hardbound int64
+	var baseSoftbound int64
+	if time > 0 {
+		hardbound = clampMax(
+			int64(time/2)+int64(float64(increment)/1.1),
+			int64(time),
+		)
+		baseSoftbound = clampMax(
+			int64(time*3/100)+int64(float64(increment)/1.1),
+			hardbound,
+		)
+	}
+
+	lastBestMoveChange := 0
+
 	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
 		alpha := -mateScore
 		beta := mateScore
 		deltaA := aspirationWindow
 		deltaB := aspirationWindow
+
 		if currentDepth > 1 {
 			alpha = previousScore - aspirationWindow
 			if alpha < -mateScore {
@@ -437,14 +454,13 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		var move Move
 		var score int
 		var pv []Move
-		var scale float64 = 1.0
-		hardbound := clampMax(int64(time/2)+int64(float64(increment)/1.1), int64(time))
-		softbound := clampMax(int64(time*3/100)+int64(float64(increment)/1.1), int64(hardbound))
+
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
 			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true)
 			totalNodes += search.nodes
+
 			if !search.ok {
 				return bestMove
 			}
@@ -463,7 +479,6 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 				if beta > mateScore {
 					beta = mateScore
 				}
-
 				deltaB *= 2
 				continue
 			}
@@ -471,9 +486,11 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			pv = searchPV(search)
 			break
 		}
+
 		if move != bestMove {
-			scale = 1.8
+			lastBestMoveChange = currentDepth
 		}
+
 		bestMove = move
 		previousScore = score
 
@@ -489,8 +506,19 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		}
 
 		if time > 0 {
-			elapsed := int64(stdtime.Since(startTime).Milliseconds())
-			softbound = clampMax(int64(float64(softbound)*scale)+int64(float64(increment)/1.1), int64(hardbound))
+			elapsed := stdtime.Since(startTime).Milliseconds()
+
+			iterationsStable := currentDepth - lastBestMoveChange
+			factor := math.Max(
+				0.8,
+				1.2-0.05*float64(iterationsStable),
+			)
+
+			softbound := clampMax(
+				int64(float64(baseSoftbound)*factor),
+				hardbound,
+			)
+
 			if elapsed >= softbound {
 				break
 			}
@@ -507,7 +535,6 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 
 	return bestMove
 }
-
 func searchPV(search *searchContext) []Move {
 	if search == nil || search.pvLength[0] <= 0 {
 		return nil
