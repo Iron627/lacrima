@@ -437,13 +437,14 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		var move Move
 		var score int
 		var pv []Move
-
+		var scale float64 = 1.0
+		hardbound := clampMax(int64(time/2)+int64(float64(increment)/1.1), int64(time))
+		softbound := clampMax(int64(time*3/100)+int64(float64(increment)/1.1), int64(hardbound))
 		for {
 			search := newSearchContext(ctx, deadline, history, tt, historyTable)
 			move = bestMove
 			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true)
 			totalNodes += search.nodes
-
 			if !search.ok {
 				return bestMove
 			}
@@ -470,7 +471,9 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 			pv = searchPV(search)
 			break
 		}
-
+		if move != bestMove {
+			scale = 1.8
+		}
 		bestMove = move
 		previousScore = score
 
@@ -487,9 +490,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 
 		if time > 0 {
 			elapsed := int64(stdtime.Since(startTime).Milliseconds())
-			hardbound := clampMax(int64(time/2)+int64(float64(increment)/1.1), int64(time))
-			softbound := clampMax(int64(time*3/100)+int64(float64(increment)/1.1), int64(hardbound))
-
+			softbound = clampMax(int64(float64(softbound)*scale)+int64(float64(increment)/1.1), int64(hardbound))
 			if elapsed >= softbound {
 				break
 			}
