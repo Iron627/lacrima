@@ -252,10 +252,10 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		move := pickBestMove(moves, scores, pseudoMoveIndex)
 		tactical := isTacticalMove(pos, move)
 		quiet := isQuietMove(pos, move)
-		if eval+fpMarginOffset+fpMarginMult*depth <= alpha && !inCheck && !tactical && bestScore > mated && depth <= 5 {
+		if eval+fpMarginOffset+fpMarginMult*depth <= alpha && !inCheck && !tactical && bestScore > mated && depth <= 5 && !isRoot {
 			continue
 		}
-		if searchedMoves >= lmpOffset+depth*depth*lmpMult && !inCheck && !tactical && bestScore > mated {
+		if searchedMoves >= lmpOffset+depth*depth*lmpMult && !inCheck && !tactical && bestScore > mated && !isRoot {
 			break
 		}
 		undo, legal := makeMoveIfLegal(pos, move, kingSquare)
