@@ -6,31 +6,8 @@
 
 written in Go, and hopefully structured better than ethantron (my old Python engine).
 
-DONE:
-  - movegen, board rep using bitboards
-  - normal moves, captures, promotions, en passant, and castling
-  - make/unmake, null moves, attack detection
-  - FEN parsing
-  - UCI support because talking to GUIs is apparently required
-  - position/go/stop/quit/setoption/ucinewgame/isready/uci
-  - perft testing for correctness
-  - time management and search cancellation
-  - texel-tuned eval using PESTO tapered eval with material + piece-square tables as a starting point + passed pawns + bishop pairs
-  - negamax with a/b pruning
-  - iterative deepening
-  - aspiration windows
-  - transposition tables with exact/lower/upper bounds
-  - configurable hash size + clear hash
-  - ordered quiescence search
-  - null-move pruning
-  - repetition detection
-  - mate score handling
-  - move ordering with TT move, MVV/LVA, promos, killers, history, and static exchange evaluation
-  - principal variation search
-  - late move reduction
-  - reverse futility pruning
-  - futility pruning
-  - late move pruning in quiescence
+README will happen when i get to it
+
 ## special thanks to:
 - members of EP and SF discord (cie, matt, seba, jeremy(funny), nano, andrew, kama, lily, chef, dr. extension, jw, Ellie (she ruined my test)) 
 
