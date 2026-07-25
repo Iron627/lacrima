@@ -124,12 +124,6 @@ func drawScore(isRoot bool) int {
 	return repetitionDrawScore
 }
 
-func lmReduction(depth int, moveIndex int) int {
-	moveIndex++
-
-	return int(0.8 + math.Log(float64(depth))*math.Log(float64(moveIndex))/2.5)
-}
-
 func absInt(x int) int {
 	if x < 0 {
 		return -x
@@ -284,7 +278,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 			if !pvNode || moveIndex > 0 {
 				if moveIndex >= 3 && depth >= 3 && !inCheck && !tactical {
-					score = negamax(search, pos, newDepth-lmReduction(depth, moveIndex), -alpha-1, -alpha, ply+1, false, nil, false)
+					score = negamax(search, pos, newDepth-int(LMRTable[depth][moveIndex]), -alpha-1, -alpha, ply+1, false, nil, false)
 					score = -score
 
 					if search.ok && score > alpha {
