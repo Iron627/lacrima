@@ -65,6 +65,10 @@ func positionKey(pos *Position) uint64 {
 	return key
 }
 
+func initPositionKey(pos *Position) {
+	pos.Key = positionKey(pos)
+}
+
 func cloneRepetitionHistory(history RepetitionHistory) RepetitionHistory {
 	if history == nil {
 		return nil
@@ -82,7 +86,7 @@ func pushRepetition(history RepetitionHistory, pos *Position) (uint64, int) {
 		return 0, 0
 	}
 
-	key := positionKey(pos)
+	key := pos.Key
 	history[key]++
 	return key, history[key]
 }

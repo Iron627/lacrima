@@ -34,6 +34,7 @@ type Move struct {
 
 type Undo struct {
 	Move            Move
+	Key             uint64
 	CapturedPiece   uint8
 	CapturedSquare  uint8
 	CastlingRights  uint8
@@ -45,6 +46,7 @@ type Undo struct {
 }
 
 type NullUndo struct {
+	Key             uint64
 	SideToMove      uint8
 	EnPassantTarget int8
 	HalfmoveClock   uint8
@@ -70,6 +72,7 @@ type Position struct {
 	EnPassantTarget int8
 	WhiteKingSquare uint8
 	BlackKingSquare uint8
+	Key             uint64
 }
 
 func (pos *Position) PieceAt(square uint8) uint8 {
@@ -128,6 +131,7 @@ func MakeMove(pos *Position, move Move) Undo {
 
 	undo := Undo{
 		Move:            move,
+		Key:             pos.Key,
 		CapturedPiece:   captured,
 		CapturedSquare:  capturedSquare,
 		CastlingRights:  pos.CastlingRights,
@@ -136,6 +140,17 @@ func MakeMove(pos *Position, move Move) Undo {
 		FullmoveNumber:  pos.FullmoveNumber,
 		WhiteKingSquare: pos.WhiteKingSquare,
 		BlackKingSquare: pos.BlackKingSquare,
+	}
+
+	key := pos.Key
+	if pos.EnPassantTarget != -1 {
+		key ^= zobristEnPassant[pos.EnPassantTarget]
+	}
+	key ^= zobristCastling[pos.CastlingRights&0x0f]
+	key ^= zobristPieces[colour][piece][move.From]
+
+	if captured != Empty {
+		key ^= zobristPieces[colour^1][captured][move.To]
 	}
 
 	pos.EnPassantTarget = -1
@@ -155,14 +170,18 @@ func MakeMove(pos *Position, move Move) Undo {
 		}
 		undo.CapturedSquare = capturedSquare
 		undo.CapturedPiece = pos.Mailbox[capturedSquare]
+		key ^= zobristPieces[colour^1][undo.CapturedPiece][capturedSquare]
 		pos.removePiece(capturedSquare)
 	} else if captured != Empty {
 		pos.removePiece(move.To)
 	}
 
 	pos.movePiece(move.From, move.To)
+	key ^= zobristPieces[colour][piece][move.To]
 
 	if isPromotion(move) {
+		key ^= zobristPieces[colour][piece][move.To]
+		key ^= zobristPieces[colour][move.Promotion][move.To]
 		pos.Board.Pieces[piece] &^= Bitboard(1) << move.To
 		pos.Board.Pieces[move.Promotion] |= Bitboard(1) << move.To
 		pos.Mailbox[move.To] = move.Promotion
@@ -179,12 +198,16 @@ func MakeMove(pos *Position, move Move) Undo {
 	if move.isCastling {
 		switch move.To {
 		case 6:
+			key ^= zobristPieces[colour][Rook][7] ^ zobristPieces[colour][Rook][5]
 			pos.movePiece(7, 5)
 		case 2:
+			key ^= zobristPieces[colour][Rook][0] ^ zobristPieces[colour][Rook][3]
 			pos.movePiece(0, 3)
 		case 62:
+			key ^= zobristPieces[colour][Rook][63] ^ zobristPieces[colour][Rook][61]
 			pos.movePiece(63, 61)
 		case 58:
+			key ^= zobristPieces[colour][Rook][56] ^ zobristPieces[colour][Rook][59]
 			pos.movePiece(56, 59)
 		}
 	}
@@ -233,6 +256,12 @@ func MakeMove(pos *Position, move Move) Undo {
 		pos.FullmoveNumber++
 	}
 	pos.SideToMove ^= 1
+	key ^= zobristSide
+	key ^= zobristCastling[pos.CastlingRights&0x0f]
+	if pos.EnPassantTarget != -1 {
+		key ^= zobristEnPassant[pos.EnPassantTarget]
+	}
+	pos.Key = key
 
 	return undo
 }
@@ -246,6 +275,7 @@ func UnmakeMove(pos *Position, undo Undo) {
 	pos.FullmoveNumber = undo.FullmoveNumber
 	pos.WhiteKingSquare = undo.WhiteKingSquare
 	pos.BlackKingSquare = undo.BlackKingSquare
+	pos.Key = undo.Key
 
 	movingPiece := pos.Mailbox[move.To]
 	if isPromotion(move) {
@@ -276,6 +306,7 @@ func UnmakeMove(pos *Position, undo Undo) {
 
 func MakeNullMove(pos *Position) NullUndo {
 	undo := NullUndo{
+		Key:             pos.Key,
 		SideToMove:      pos.SideToMove,
 		EnPassantTarget: pos.EnPassantTarget,
 		HalfmoveClock:   pos.HalfmoveClock,
@@ -287,10 +318,15 @@ func MakeNullMove(pos *Position) NullUndo {
 	pos.SideToMove ^= 1
 	pos.EnPassantTarget = -1
 	pos.HalfmoveClock++
+	pos.Key ^= zobristSide
+	if undo.EnPassantTarget != -1 {
+		pos.Key ^= zobristEnPassant[undo.EnPassantTarget]
+	}
 	return undo
 }
 
 func UnmakeNullMove(pos *Position, undo NullUndo) {
+	pos.Key = undo.Key
 	pos.SideToMove = undo.SideToMove
 	pos.EnPassantTarget = undo.EnPassantTarget
 	pos.HalfmoveClock = undo.HalfmoveClock
