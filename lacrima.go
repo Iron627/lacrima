@@ -113,7 +113,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	scanner := bufio.NewScanner(input)
 
 	pos, _ := PositionFromFEN(startFEN)
-	history := RepetitionHistory{positionKey(&pos): 1}
+	history := RepetitionHistory{pos.Key: 1}
 	hashMB := defaultHashMB
 	tt := NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
 	var historyTable [2][128][128]int
@@ -181,7 +181,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 		case "ucinewgame":
 			stopSearch(true)
 			pos, _ = PositionFromFEN(startFEN)
-			history = RepetitionHistory{positionKey(&pos): 1}
+			history = RepetitionHistory{pos.Key: 1}
 			tt.Clear()
 			historyTable = [2][128][128]int{}
 
@@ -461,7 +461,7 @@ func parsePositionWithHistory(fields []string) (Position, RepetitionHistory, boo
 		return Position{}, nil, false
 	}
 
-	history := RepetitionHistory{positionKey(&pos): 1}
+	history := RepetitionHistory{pos.Key: 1}
 
 	if i < len(fields) {
 		if fields[i] != "moves" {
@@ -476,7 +476,7 @@ func parsePositionWithHistory(fields []string) (Position, RepetitionHistory, boo
 			return Position{}, nil, false
 		}
 		MakeMove(&pos, move)
-		history[positionKey(&pos)]++
+		history[pos.Key]++
 	}
 
 	return pos, history, true

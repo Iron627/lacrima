@@ -171,7 +171,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		return quiesce(search, pos, alpha, beta, ply)
 	}
 
-	key := positionKey(pos)
+	key := pos.Key
 	originalAlpha := alpha
 	var ttMove Move
 	if entry, ok := search.tt.Probe(key); ok {
@@ -579,7 +579,7 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 
 	search.nodes++
 
-	key := positionKey(pos)
+	key := pos.Key
 	originalAlpha := alpha
 	kingSquare := currentKingSquare(pos)
 	inCheck := InCheck(pos, kingSquare)

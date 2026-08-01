@@ -150,5 +150,7 @@ func PositionFromFEN(fen string) (Position, error) {
 		pos.FullmoveNumber = fullmoveNumber
 	}
 
+	initPositionKey(&pos)
+
 	return pos, nil
 }
