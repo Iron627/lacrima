@@ -50,6 +50,8 @@ type searchContext struct {
 	history      RepetitionHistory
 	tt           *TranspositionTable
 	historyTable *[2][128][128]int
+	contHist     *[2][6][64][6][64]int
+	moves        moveStack
 	killers      [maxSearchPly][2]Move
 	pvTable      [maxSearchPly][maxSearchPly]Move
 	pvLength     [maxSearchPly]int
@@ -57,13 +59,14 @@ type searchContext struct {
 	ok           bool
 }
 
-func newSearchContext(ctx context.Context, deadline stdtime.Time, history RepetitionHistory, tt *TranspositionTable, historyTable *[2][128][128]int) *searchContext {
+func newSearchContext(ctx context.Context, deadline stdtime.Time, history RepetitionHistory, tt *TranspositionTable, historyTable *[2][128][128]int, contHist *[2][6][64][6][64]int) *searchContext {
 	return &searchContext{
 		ctx:          ctx,
 		deadline:     deadline,
 		history:      history,
 		tt:           tt,
 		historyTable: historyTable,
+		contHist:     contHist,
 		ok:           true,
 	}
 }
@@ -141,6 +144,17 @@ func updateHistory(history *[2][128][128]int, side int, from uint8, to uint8, bo
 	h := history[side][from][to]
 	h += bonus - h*absInt(bonus)/maxHistoryValue
 	history[side][from][to] = h
+}
+
+func updateContHistory(contHist *[2][6][64][6][64]int, side int, prevPiece uint8, prevTo uint8, piece uint8, to uint8, bonus int) {
+	if bonus > maxHistoryValue {
+		bonus = maxHistoryValue
+	} else if bonus < -maxHistoryValue {
+		bonus = -maxHistoryValue
+	}
+	h := contHist[side][prevPiece][prevTo][piece][to]
+	h += bonus - h*absInt(bonus)/maxHistoryValue
+	contHist[side][prevPiece][prevTo][piece][to] = h
 }
 
 func negamax(search *searchContext, pos *Position, depth int, alpha int, beta int, ply int, allowNull bool, rootBestMove *Move, pvNode bool) int {
@@ -227,7 +241,8 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 	}
 
 	scores := scoreBuf[:len(moves)]
-	scoreMoves(pos, moves, ttMove, killerA, killerB, search.historyTable, scores)
+	previousMove, hasPreviousMove := search.moves.previous(0)
+	scoreMoves(pos, moves, ttMove, killerA, killerB, search.historyTable, search.contHist, previousMove, hasPreviousMove, scores)
 
 	bestMove := Move{}
 	bestScore := -mateScore
@@ -256,6 +271,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 		if !legal {
 			continue
 		}
+		search.moves.push(move)
 
 		moveIndex := searchedMoves
 		searchedMoves++
@@ -297,6 +313,7 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 			}
 		}
 		popRepetition(search.history, repetitionKey)
+		search.moves.pop()
 
 		UnmakeMove(pos, undo)
 
@@ -326,7 +343,10 @@ func negamax(search *searchContext, pos *Position, depth int, alpha int, beta in
 
 					updateHistory(search.historyTable, side, quietMove.From, quietMove.To, -bonus)
 				}
-
+				prevMove, ok := search.moves.previous(0)
+				if ok {
+					updateContHistory(search.contHist, side, pos.PieceAt(prevMove.To), prevMove.To, pos.PieceAt(move.From), move.To, bonus)
+				}
 				if ply >= 0 && ply < maxSearchPly {
 					storeKiller(&search.killers, ply, move)
 				}
@@ -381,7 +401,7 @@ func hasNonPawnMaterial(pos *Position) bool {
 	return pos.Board.Colours[pos.SideToMove]&^(pos.Board.Pieces[Pawn]|pos.Board.Pieces[King]) != 0
 }
 
-func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int, increment int) Move {
+func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int, contHist *[2][6][64][6][64]int, increment int) Move {
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
 
@@ -450,7 +470,7 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 		var pv []Move
 
 		for {
-			search := newSearchContext(ctx, deadline, history, tt, historyTable)
+			search := newSearchContext(ctx, deadline, history, tt, historyTable, contHist)
 			move = bestMove
 			score = negamax(search, pos, currentDepth, alpha, beta, 0, true, &move, true)
 			totalNodes += search.nodes
@@ -639,6 +659,7 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 		if !legal {
 			continue
 		}
+		search.moves.push(move)
 		searchedMoves++
 
 		score := quiesce(search, pos, -beta, -alpha, ply+1)
@@ -647,6 +668,7 @@ func quiesce(search *searchContext, pos *Position, alpha int, beta int, ply int)
 			bestScore = score
 		}
 
+		search.moves.pop()
 		UnmakeMove(pos, undo)
 
 		if !search.ok {

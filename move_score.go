@@ -7,6 +7,7 @@ const killerMoveBonus = 600000
 const badCapturePenalty = -800000
 const maxHistoryValue = 8192
 const historyScoreDivisor = 96
+const contHistScoreDivisor = 96
 
 var moveOrderingPieceValues = [6]int{100, 300, 325, 500, 900, 0}
 
@@ -44,10 +45,15 @@ func ScoreMove(pos *Position, move Move) int {
 	return 0
 }
 
-func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int, scores []int) {
+func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, killerB Move, historyTable *[2][128][128]int, contHist *[2][6][64][6][64]int, previousMove Move, hasPreviousMove bool, scores []int) {
 	side := 0
 	if pos.SideToMove == Black {
 		side = 1
+	}
+
+	var previousPiece uint8
+	if hasPreviousMove {
+		previousPiece = pos.PieceAt(previousMove.To)
 	}
 
 	for i, move := range moves {
@@ -60,6 +66,10 @@ func scoreMoves(pos *Position, moves []Move, preferredMove Move, killerA Move, k
 				score += killerMoveBonus
 			}
 			score += historyTable[side][move.From][move.To] / historyScoreDivisor
+			if hasPreviousMove {
+				piece := pos.PieceAt(move.From)
+				score += contHist[side][previousPiece][previousMove.To][piece][move.To] / contHistScoreDivisor
+			}
 		}
 
 		scores[i] = score

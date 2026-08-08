@@ -93,10 +93,11 @@ func RunBench(output io.Writer) {
 
 		var historyTable [2][128][128]int
 		var searchedNodes uint64
+		var contHist [2][6][64][6][64]int
 		tt.Clear()
 		searchBestMove(context.Background(), &pos, benchDepth, 0, nil, func(info SearchInfo) {
 			searchedNodes = info.Nodes
-		}, tt, &historyTable, 0)
+		}, tt, &historyTable, &contHist, 0)
 		nodes += searchedNodes
 	}
 	elapsed := time.Since(start)
@@ -117,7 +118,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	hashMB := defaultHashMB
 	tt := NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
 	var historyTable [2][128][128]int
-
+	var contHist [2][6][64][6][64]int
 	var searchID atomic.Uint64
 	var searchCancel context.CancelFunc
 	var searchDone <-chan struct{}
@@ -222,7 +223,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 					}
 
 					writeLine(formatUCIInfo(info))
-				}, tt, &historyTable, increment)
+				}, tt, &historyTable, &contHist, increment)
 
 				if searchID.Load() != id {
 					return
