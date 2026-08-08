@@ -1,6 +1,9 @@
 package lacrima
 
-import "unsafe"
+import (
+	"math/bits"
+	"unsafe"
+)
 
 const (
 	defaultHashMB = 16
@@ -76,7 +79,8 @@ func (tt *TranspositionTable) Store(key uint64, depth int, score int, flag TTFla
 }
 
 func (tt *TranspositionTable) index(key uint64) uint64 {
-	return key % uint64(len(tt.entries))
+	hi, _ := bits.Mul64(key, uint64(len(tt.entries)))
+	return hi
 }
 
 func transpositionTableEntriesForMB(hashMB int) uint64 {
