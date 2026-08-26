@@ -381,7 +381,7 @@ func hasNonPawnMaterial(pos *Position) bool {
 	return pos.Board.Colours[pos.SideToMove]&^(pos.Board.Pieces[Pawn]|pos.Board.Pieces[King]) != 0
 }
 
-func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int, increment int) Move {
+func searchBestMove(ctx context.Context, pos *Position, depth int, time int, history RepetitionHistory, onInfo SearchInfoFunc, tt *TranspositionTable, historyTable *[2][128][128]int, increment int, moveOverhead int) Move {
 	originalSideToMove := pos.SideToMove
 	startTime := stdtime.Now()
 
@@ -390,8 +390,20 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 	}()
 
 	var deadline stdtime.Time
+	var hardbound int64
+	var baseSoftbound int64
 	if time > 0 {
-		deadline = stdtime.Now().Add(stdtime.Duration(clampMax(int64(time/2+int(float64(increment)/1.1)), int64(time))) * stdtime.Millisecond)
+		overhead := clampMin(int64(moveOverhead), 0)
+		availableTime := clampMin(int64(time)-overhead, 0)
+		hardbound = clampMax(
+			int64(time/2)+int64(float64(increment)/1.1),
+			availableTime,
+		)
+		baseSoftbound = clampMax(
+			int64(time*3/100)+int64(float64(increment)/1.1),
+			hardbound,
+		)
+		deadline = startTime.Add(stdtime.Duration(hardbound) * stdtime.Millisecond)
 	}
 
 	var pseudoBuf [256]Move
@@ -410,19 +422,6 @@ func searchBestMove(ctx context.Context, pos *Position, depth int, time int, his
 
 	if depth < 1 {
 		depth = 1
-	}
-
-	var hardbound int64
-	var baseSoftbound int64
-	if time > 0 {
-		hardbound = clampMax(
-			int64(time/2)+int64(float64(increment)/1.1),
-			int64(time),
-		)
-		baseSoftbound = clampMax(
-			int64(time*3/100)+int64(float64(increment)/1.1),
-			hardbound,
-		)
 	}
 
 	lastBestMoveChange := 0

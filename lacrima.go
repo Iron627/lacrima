@@ -16,6 +16,9 @@ import (
 const startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 const infiniteDepth = 100
 const benchDepth = 8
+const defaultMoveOverhead = 50
+const minMoveOverhead = 0
+const maxMoveOverhead = 5000
 
 // fens
 var benchFENs = []string{
@@ -96,7 +99,7 @@ func RunBench(output io.Writer) {
 		tt.Clear()
 		searchBestMove(context.Background(), &pos, benchDepth, 0, nil, func(info SearchInfo) {
 			searchedNodes = info.Nodes
-		}, tt, &historyTable, 0)
+		}, tt, &historyTable, 0, defaultMoveOverhead)
 		nodes += searchedNodes
 	}
 	elapsed := time.Since(start)
@@ -115,6 +118,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 	pos, _ := PositionFromFEN(startFEN)
 	history := RepetitionHistory{pos.Key: 1}
 	hashMB := defaultHashMB
+	moveOverhead := defaultMoveOverhead
 	tt := NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
 	var historyTable [2][128][128]int
 
@@ -154,6 +158,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 			writeLine("id name Lacrima v1.1.1")
 			writeLine("id author Iron")
 			writeLine("option name Hash type spin default", defaultHashMB, "min", minHashMB, "max", maxHashMB)
+			writeLine("option name MoveOverhead type spin default", defaultMoveOverhead, "min", minMoveOverhead, "max", maxMoveOverhead)
 			writeLine("option name Threads type spin default 1 min 1 max 1")
 			writeLine("option name Clear Hash type button")
 			writeLine("uciok")
@@ -174,6 +179,15 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 				stopSearch(true)
 				hashMB = nextHashMB
 				tt = NewTranspositionTable(transpositionTableEntriesForMB(hashMB))
+				return true
+			}():
+			case func() bool {
+				nextMoveOverhead, ok := parseMoveOverheadOption(fields)
+				if !ok {
+					return false
+				}
+				stopSearch(true)
+				moveOverhead = nextMoveOverhead
 				return true
 			}():
 			}
@@ -222,7 +236,7 @@ func RunUCIWithIO(input io.Reader, output io.Writer, errOutput io.Writer) {
 					}
 
 					writeLine(formatUCIInfo(info))
-				}, tt, &historyTable, increment)
+				}, tt, &historyTable, increment, moveOverhead)
 
 				if searchID.Load() != id {
 					return
@@ -384,6 +398,26 @@ func parseHashOption(fields []string) (int, bool) {
 	}
 
 	return hashMB, true
+}
+
+func parseMoveOverheadOption(fields []string) (int, bool) {
+	name, value, ok := parseSetOption(fields)
+	if !ok || !strings.EqualFold(name, "MoveOverhead") || value == "" {
+		return 0, false
+	}
+
+	moveOverhead, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false
+	}
+	if moveOverhead < minMoveOverhead {
+		moveOverhead = minMoveOverhead
+	}
+	if moveOverhead > maxMoveOverhead {
+		moveOverhead = maxMoveOverhead
+	}
+
+	return moveOverhead, true
 }
 
 func isClearHashOption(fields []string) bool {
